@@ -1,0 +1,233 @@
+Log normalization: ANSI removed; checkout path anonymized; trailing spaces made visible.
+TASK-0001 review: negative gates and byte-for-byte restoration
+Source snapshot: 85ed0c81cb78eb459536788af5e8c30388393a38
+Source tree independently matched: bbf6036af228ef93e4b777e2d98876f10e0f5fae
+Includes local review fixes; exact published head is verified separately by CI/PR review.
+
+--- negative-unit.log ---
+
+> baocaobanhang@0.1.0 test:unit
+> vitest run
+
+
+ RUN  v5.1.0 <verification-checkout>
+
+ ❯ tests/unit/page.test.tsx (1 test | 1 failed) 42ms
+   ❯ HomePage (Sprint 0 scaffold) (1)
+     × renders accessible main landmark and heading with neutral Sprint 0 status 41ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 3 passed (4)
+   Start at  21:55:59
+   Duration  1.50s (environment 47%, tests 40%, setup 11%, transform 2%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/page.test.tsx > HomePage (Sprint 0 scaffold) > renders accessible main landmark and heading with neutral Sprint 0 status
+TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name "Assertion intentionally broken for AC-05"
+
+Here are the accessible roles:
+
+  banner:
+
+  Name "":
+  <header
+    class="scaffold-header"
+  />
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  <p
+    class="scaffold-badge"
+  />
+
+  --------------------------------------------------
+  heading:
+
+  Name "Branch Sales OS — Báo cáo và quản trị bán hàng chi nhánh":
+  <h1
+    id="scaffold-heading"
+  />
+
+  --------------------------------------------------region:
+
+  Name "Trạng thái hệ thống hiện tại":
+  <section
+    aria-labelledby="status-heading"
+    class="scaffold-status"
+  />
+
+  --------------------------------------------------
+  heading:
+
+  Name "Trạng thái hệ thống hiện tại":
+  <h2
+    id="status-heading"
+  />
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  <p />
+
+  --------------------------------------------------
+  list:
+
+  Name "":
+  <ul
+    class="scaffold-details"
+  />
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  <li />
+
+  Name "":
+  <li />
+
+  Name "":
+  <li />
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+<main
+  aria-labelledby="scaffold-heading"
+  class="scaffold-container"
+>
+  <header
+    class="scaffold-header"
+  >
+    <p
+      class="scaffold-badge"
+    >
+      Sprint 0 — Technical Foundation
+    </p>
+    <h1
+      id="scaffold-heading"
+    >
+      Branch Sales OS — Báo cáo và quản trị bán hàng chi nhánh
+    </h1>
+  </header>
+  <section
+    aria-labelledby="status-heading"
+    class="scaffold-status"
+  >
+    <h2
+      id="status-heading"
+    >
+      Trạng thái hệ thống hiện tại
+    </h2>
+    <p>
+      Ứng dụng đang ở giai đoạn khởi tạo kỹ thuật (Sprint 0). Chưa triển khai chức năng nghiệp vụ, cơ sở dữ liệu, chỉ tiêu KPI, phân quyền RBAC hay xác thực SSO.
+    </p>
+    <ul
+      class="scaffold-details"
+    >
+      <li>
+        Môi trường dữ liệu: Chỉ dùng trạng thái tĩnh / synthetic.
+      </li>
+      <li>
+        Kết nối ngoài: Không kết nối cơ sở dữ liệu, SSO hoặc dịch vụ ngoài.
+      </li>
+      <li>
+        Phạm vi: Kiểm chứng build, typecheck, lint, unit test, E2E và CI gates.
+      </li>
+    </ul>
+  </section>
+</main>
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/unit/page.test.tsx:14:34
+     12|     expect(main).toBeInTheDocument();
+     13|
+     14|     const heading = within(main).getByRole("heading", {
+       |                                  ^
+     15|       level: 1,
+     16|       name: "Assertion intentionally broken for AC-05",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+EXIT_CODE=1
+
+--- negative-typecheck.log ---
+
+> baocaobanhang@0.1.0 typecheck
+> tsc --noEmit
+
+src/app/page.tsx(1,7): error TS2322: Type 'number' is not assignable to type 'string'.
+
+EXIT_CODE=2
+
+--- negative-lint.log ---
+
+> baocaobanhang@0.1.0 lint
+> eslint . --max-warnings=0
+
+
+<verification-checkout>/src/app/page.tsx
+  1:7  warning  'invalidGateProof' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (0 errors, 1 warning)
+
+ESLint found too many warnings (maximum: 0).
+
+EXIT_CODE=1
+
+--- restored-unit.log ---
+
+> baocaobanhang@0.1.0 test:unit
+> vitest run
+
+
+ RUN  v5.1.0 <verification-checkout>
+
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  21:56:04
+   Duration  1.12s (tests 52%, environment 37%, setup 9%, transform 1%)
+
+
+EXIT_CODE=0
+
+--- restored-typecheck.log ---
+
+> baocaobanhang@0.1.0 typecheck
+> tsc --noEmit
+
+
+EXIT_CODE=0
+
+--- restored-lint.log ---
+
+> baocaobanhang@0.1.0 lint
+> eslint . --max-warnings=0
+
+
+EXIT_CODE=0
+
+--- final-format.log ---
+
+> baocaobanhang@0.1.0 format:check
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+
+EXIT_CODE=0
+
+--- diff-gate.txt ---
+Clean working tree gate exit=0
+Committed range gate exit=2
+sample.txt:1: trailing whitespace.
++trailing whitespace [trailing spaces shown]

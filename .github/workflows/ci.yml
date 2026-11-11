@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality & Security Gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI_EVENT: ${{ github.event_name }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pinned Node.js 24.22.2 and npm 11.19.1
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Verify Node.js and npm pinned versions
+        run: |
+          node -v
+          npm -v
+          test "$(node -v)" = "v24.22.2"
+          test "$(npm -v)" = "11.19.1"
+
+      - name: Install Gitleaks 8.30.1 with SHA-256 checksum verification
+        run: |
+          GITLEAKS_VERSION="8.30.1"
+          GITLEAKS_TARBALL="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          EXPECTED_SHA256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+          curl -fSL -o "/tmp/${GITLEAKS_TARBALL}" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${GITLEAKS_TARBALL}"
+          echo "${EXPECTED_SHA256}  /tmp/${GITLEAKS_TARBALL}" | sha256sum -c -
+          mkdir -p /tmp/gitleaks-bin
+          tar -xzf "/tmp/${GITLEAKS_TARBALL}" -C /tmp/gitleaks-bin gitleaks
+          chmod +x /tmp/gitleaks-bin/gitleaks
+          echo "/tmp/gitleaks-bin" >> "$GITHUB_PATH"
+          /tmp/gitleaks-bin/gitleaks version
+
+      - name: Clean install dependencies and verify lockfile integrity
+        run: |
+          npm ci
+          git diff --exit-code -- package-lock.json
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Playwright Chromium browser
+        # ubuntu-24.04 already includes the shared libraries used by this smoke suite.
+        # E2E remains mandatory and fails if a future runner image lacks them.
+        run: npx playwright install chromium
+
+      - name: E2E tests on local production server
+        run: npm run test:e2e
+
+      - name: Security gates (Gitleaks + npm audit)
+        run: |
+          npm run security
+          if [ "$CI_EVENT" = "pull_request" ]; then
+            gitleaks git --no-banner --redact --verbose --log-opts="$BASE_SHA..$HEAD_SHA" .
+          fi
+
+      - name: Diff whitespace check
+        run: |
+          if [ "$CI_EVENT" = "pull_request" ]; then
+            git diff --check "$BASE_SHA...$HEAD_SHA"
+          elif [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            git diff-tree --root --check -r "$HEAD_SHA"
+          else
+            git diff --check "$BASE_SHA" "$HEAD_SHA"
+          fi
