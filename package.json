@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "security": "gitleaks version && gitleaks git --no-banner --redact --verbose . && npm audit --audit-level=high"
+    "security": "sh scripts/security.sh"
   },
   "dependencies": {
     "next": "16.4.6",

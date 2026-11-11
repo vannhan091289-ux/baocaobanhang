@@ -45,6 +45,7 @@ npm -v    # 11.19.1
 ```
 
 Cài đặt Gitleaks CLI `8.30.1` vào `PATH` để chạy cổng bảo mật (`npm run security`).
+Lệnh này từ chối scanner sai phiên bản hoặc Git checkout bị shallow. Dùng clone đầy đủ lịch sử; nếu đã clone shallow, chạy `git fetch --unshallow` trước khi scan.
 
 ### 2. Cài đặt dependencies từ lockfile
 
