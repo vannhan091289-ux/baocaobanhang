@@ -5,9 +5,12 @@ out/
 dist/
 build/
 coverage/
+playwright-report/
+test-results/
 .turbo/
 .cache/
 *.tsbuildinfo
+next-env.d.ts
 
 # Local environment and secrets (keep safe examples)
 .env
