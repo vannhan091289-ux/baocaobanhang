@@ -14,6 +14,8 @@ Mỗi metric thực tế cần: `metric_id`, tên/nhóm, đơn vị-tiền tệ,
 
 Không gán mặc định cho định nghĩa chưa được ngân hàng phê duyệt. Không cộng số dư hay tỷ lệ phần trăm theo ngày/tháng. Không làm composite score khi chưa có trọng số chính thức.
 
+Thiếu dữ liệu (`null`/missing) phải hiển thị trạng thái thiếu dữ liệu, không tự thay bằng số 0. Khi thiếu đầu vào, không tính Gap/tỷ lệ hoặc phát cảnh báo hiệu suất KPI; số 0 chỉ hợp lệ khi nguồn xác nhận kết quả bằng 0.
+
 ## Phân bổ và đối soát
 Chỉ tiêu năm/tháng được giao và phê duyệt. Tuần/ngày là dự phóng kế hoạch có thể điều chỉnh, không âm thầm sửa chỉ tiêu mẹ. Phải định nghĩa ngày làm việc/ngày nghỉ, kỳ chốt, mẫu số 0, KPI âm, vượt mức, điều chỉnh truy hồi và bán chéo nhiều nhân sự. Lưu version/lịch sử điều chỉnh.
 

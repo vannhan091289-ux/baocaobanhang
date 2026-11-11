@@ -1,6 +1,6 @@
 # Agent rules — ChatGPT / Antigravity / Codex
 
-1. Đọc `docs/PRODUCT.md` và `tasks/TASK-*.md` được giao. Chỉ code khi task có trạng thái `READY` và chấp thuận rõ ràng; nếu thiếu, trả `BLOCKED`.
+1. Đọc `docs/PRODUCT.md` và `tasks/TASK-*.md` được giao. Chỉ bắt đầu code khi task `READY` và có chấp thuận rõ ràng. Tiếp tục trong `IN_PROGRESS` hoặc sửa lỗi trong `REWORK` khi cùng phạm vi và phê duyệt còn hiệu lực; thiếu điều kiện hoặc task `BLOCKED` thì dừng.
 2. Trước code, đọc `docs/ENGINEERING.md`, `docs/SECURITY.md`, phần liên quan trong `docs/BUSINESS_RULES.md` và `docs/ARCHITECTURE.md`. Lập kế hoạch ngắn: file sửa, rủi ro, kiểm thử.
 3. Chỉ thay đổi phạm vi task; không tự thêm tính năng, abstraction, dependency, migration hoặc hạ tầng. Ưu tiên thay đổi nhỏ nhất có thể kiểm thử.
 4. Kiểm soát quyền và dữ liệu ở backend; mọi số liệu KPI phải theo định nghĩa đã phê duyệt. Thiếu quy tắc nghiệp vụ thì dừng, không đoán.
