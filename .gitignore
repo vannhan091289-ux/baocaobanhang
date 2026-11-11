@@ -1,0 +1,48 @@
+# Dependencies and build
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# Local environment and secrets (keep safe examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Local data and generated exports
+*.sqlite
+*.sqlite3
+*.db
+local-data/
+uploads/
+exports/
+backups/
+tmp/
+temp/
+
+# Logs, IDE and OS
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local tooling
+.vercel/
+.antigravity/
