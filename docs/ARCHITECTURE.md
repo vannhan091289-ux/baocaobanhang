@@ -1,4 +1,6 @@
-# Architecture baseline — đề xuất, chưa quyết định stack production
+# Architecture baseline — stack Sprint 0 đã duyệt, production còn mở
+
+[ADR-001](adr/ADR-001-stack.md) được ACCEPTED ngày 2026-11-11 cho scaffold/toolchain TASK-0001; Next.js App Router + React + TypeScript strict, npm và test/security tooling theo version baseline trong ADR. SSO/auth hoãn khỏi Sprint 0 theo D-08; không database hoặc chức năng nghiệp vụ.
 
 Ưu tiên modular monolith và PostgreSQL/TypeScript nếu phù hợp với stack được phê duyệt. Không xây microservices, message broker hoặc engine AI khi chưa cần.
 
@@ -13,5 +15,5 @@ Organization & Authorization; KPI definitions/Targets/Actuals; WeeklyPlans/Activ
 - Thay đổi chỉ tiêu, sửa Actual, chuyển Lead, đóng cảnh báo phải audit và có khả năng truy vết.
 - Không ấn định đường dẫn code trước khi scaffold/stack được chốt; mỗi TASK sau đó phải xác định file thật và tác động schema/API.
 
-## ADR cần quyết định
-ADR-001: stack/modular monolith; ADR-002: RBAC/data scope; ADR-003: KPI facts/reconciliation; ADR-004: event/notification channels; ADR-005: customer reference/data restrictions. Tất cả hiện `PROPOSED`.
+## Trạng thái ADR
+ADR-001: stack/cấu trúc Sprint 0 `ACCEPTED`, không duyệt kiến trúc production. ADR-002: RBAC/data scope; ADR-003: KPI facts/reconciliation; ADR-004: event/notification channels; ADR-005: customer reference/data restrictions vẫn `PROPOSED`. Modular monolith/PostgreSQL là định hướng cho giai đoạn nghiệp vụ, chưa cho phép triển khai ở Sprint 0.
