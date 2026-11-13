@@ -17,7 +17,7 @@
 Chủ dự án đã chọn trực tiếp: “Chuẩn bị đặc tả Sprint 1 và phương án cần duyệt; chưa code đăng nhập/database”.
 
 - [TASK-0002](../tasks/TASK-0002.md) chỉ cho phép thực hiện trong chế độ `DOCUMENTATION_ONLY` trên nhánh `feat/TASK-0002-sprint-1-spec` ([Draft PR #4](https://github.com/vannhan091289-ux/baocaobanhang/pull/4)).
-- [docs/specs/SPRINT-1.md](specs/SPRINT-1.md) (`DRAFT` v0.2) trình bày mục tiêu, ranh giới facts/proposals/unknowns, actors, thực thể dữ liệu tối thiểu, các luồng nghiệp vụ/từ chối, phân tích tối đa hai phương án cho `D-08` và `D-09` (kèm nguồn chuẩn chính thức đọc ngày `2026-11-13`), lộ trình chia nhỏ `S1-A`..`S1-C`, kế hoạch kiểm thử/bảo mật/rollback và câu hỏi trình duyệt.
+- [docs/specs/SPRINT-1.md](specs/SPRINT-1.md) (`DRAFT` v0.3) trình bày mục tiêu, ranh giới facts/proposals/unknowns, actors, thực thể dữ liệu tối thiểu, các luồng nghiệp vụ/từ chối, phân tích tối đa hai phương án cho `D-08` và `D-09` (kèm nguồn chuẩn chính thức đọc ngày `2026-11-13`), lộ trình chia nhỏ `S1-A`..`S1-C`, kế hoạch kiểm thử/bảo mật/rollback và câu hỏi trình duyệt.
 - [docs/adr/ADR-002-authorization.md](adr/ADR-002-authorization.md) (`PROPOSED` v0.2) là nguồn chuẩn duy nhất cho mô hình phân quyền `role + action + resource + scope + effective_time`, nguyên tắc `default-deny`, tách biệt quyền `CONFIG_ADMIN` (không mặc nhiên xem dữ liệu KH, cấm tự nâng quyền), các kịch bản từ chối bắt buộc và quy tắc kiểm toán (`AuditEvent`).
 - Việc hoàn thiện bộ tài liệu này **không** đóng `D-08` hay `D-09`, **không** chuyển `ADR-002` sang `ACCEPTED`, và **không** cấp quyền viết code xác thực, cơ sở dữ liệu hay triển khai Sprint 1.
 
