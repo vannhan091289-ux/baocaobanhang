@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Branch Sales OS — Nền tảng kỹ thuật Sprint 0",
+  title: "Branch Sales OS — Nền tảng kỹ thuật & Định danh Sprint 1 (S1-A)",
   description:
-    "Scaffold kỹ thuật trung tính cho Branch Sales OS V3.0 (Sprint 0). Chưa triển khai dữ liệu nghiệp vụ, cơ sở dữ liệu hay SSO.",
+    "Nền tảng xác thực OIDC synthetic, phiên server-side và kiểm soát truy cập mặc định từ chối (S1-A DEVTEST) cho Branch Sales OS V3.0.",
 };
 
 export default function RootLayout({

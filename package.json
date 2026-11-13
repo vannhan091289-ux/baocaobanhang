@@ -16,13 +16,23 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
-    "security": "sh scripts/security.sh"
+    "security": "sh scripts/security.sh",
+    "env:test:start": "node scripts/devtest-env.mjs start",
+    "env:test:health": "node scripts/devtest-env.mjs health",
+    "env:test:seed": "node scripts/seed-s1a.mjs",
+    "env:test:stop": "node scripts/devtest-env.mjs stop",
+    "db:migrate:preview": "node scripts/migrate-s1a.mjs preview",
+    "db:migrate:up": "node scripts/migrate-s1a.mjs up"
   },
   "dependencies": {
     "next": "16.4.6",
+    "openid-client": "6.8.9",
+    "pg": "8.23.1",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
@@ -30,11 +40,13 @@
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.1",
     "eslint-config-next": "16.4.6",
     "jsdom": "31.0.0",
+    "node-pg-migrate": "9.0.0",
     "prettier": "3.10.0",
     "typescript": "5.9.3",
     "vite": "8.3.8",
