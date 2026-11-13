@@ -667,6 +667,18 @@ export async function verifyRequestSession(params: {
   // A concurrent authority mutation can revoke after our initial read. Never
   // authorize with freshly-read authority if this old cookie could not refresh.
   if (refreshed.rowCount !== 1) {
+    await recordDenyAuditSafely(db, {
+      occurredAt: now,
+      actorStaffId: session.staff_id,
+      actorSubjectRef: identityLink
+        ? createSafeSubjectRef(identityLink.issuer, identityLink.subject)
+        : `staff:${session.staff_id}`,
+      action: "auth.session.verify",
+      resourceType: "session",
+      resourceId: session.id,
+      scopeContext: { reason: "SESSION_REVOKED" },
+      reasonCode: "SESSION_REVOKED",
+    });
     return {
       authenticated: false,
       httpStatus: 401,

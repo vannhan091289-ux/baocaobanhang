@@ -944,6 +944,11 @@ describe("AC-05 & AC-06: Session Lifecycle, Immediate Revocation on Role/Departm
       });
       expect(changed).toBe(true);
       expect(result.authenticated).toBe(false);
+      const audit = await migratorPool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM audit_events WHERE action='auth.session.verify' AND resource_id=$1 AND reason_code='SESSION_REVOKED' AND decision='DENY'",
+        [session.sessionId],
+      );
+      expect(Number(audit.rows[0]!.count)).toBeGreaterThan(0);
       if (!result.authenticated)
         expect(result.reasonCode).toBe("SESSION_REVOKED");
     } finally {
