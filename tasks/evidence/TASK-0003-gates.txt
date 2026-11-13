@@ -1,0 +1,96 @@
+HISTORICAL AUTHOR EVIDENCE AT PR6 HEAD 035d9cc — NOT FINAL ACCEPTANCE AFTER REVIEW FIXES
+See TASK-0003-review.md for findings, remediation and final-head ledger.
+
+# TASK-0003 (Sprint 1 — S1-A) Quality, Integration, E2E & Security Gate Evidence Log
+Base branch: main (04e7af0738e3ba90f04dca8c456b87328aeaf6b8)
+Feature branch: feat/TASK-0003-s1a-identity-foundation
+Draft PR: https://github.com/vannhan091289-ux/baocaobanhang/pull/6
+Code Head SHA: f447a3c9ccf98a2c5e657e04662bd5d1c0511928
+GitHub Actions CI Run (linux/amd64): https://github.com/vannhan091289-ux/baocaobanhang/actions/runs/43459603379 (Conclusion: success)
+Host OS / Platform: Darwin arm64 (macOS Apple Silicon)
+
+================================================================================
+1. EXECUTION PREFLIGHT — APPROVED COLIMA PROFILE & DOCKER/COMPOSE RUNTIME
+================================================================================
+Command:
+  colima start --profile baocaobanhang --arch aarch64 --vm-type vz --cpus 2 --memory 3 --disk 20 --activate=false
+  colima list
+  docker context ls
+  docker --context colima-baocaobanhang version
+  docker --context colima-baocaobanhang info --format 'OSType={{.OSType}} Architecture={{.Architecture}} ServerVersion={{.ServerVersion}}'
+  docker-compose version
+
+Output (Exit code: 0):
+  PROFILE          STATUS     ARCH       CPUS    MEMORY    DISK     RUNTIME    ADDRESS
+  baocaobanhang    Running    aarch64    2       3GiB      20GiB    docker
+
+  NAME                   DESCRIPTION                               DOCKER ENDPOINT                                                ERROR
+  colima-baocaobanhang   colima [profile=baocaobanhang]            unix:///Users/hoangvannhan/.colima/baocaobanhang/docker.sock
+  default *              Current DOCKER_HOST based configuration   unix:///var/run/docker.sock
+
+  Client: Docker Engine - Community (Version: 29.9.3, OS/Arch: darwin/arm64, Context: colima-baocaobanhang)
+  Server: Docker Engine - Community (Version: 29.5.2, OS/Arch: linux/arm64)
+  OSType=linux Architecture=aarch64 ServerVersion=29.5.2
+  Docker Compose version 5.7.1
+  Colima YAML verification: cpu: 2, memory: 3, disk: 20, arch: aarch64, vmType: vz, vzRosetta: false, kubernetes.enabled: false.
+
+================================================================================
+2. TOOLCHAIN & LOCKFILE INTEGRITY (AC-01)
+================================================================================
+Command:
+  node -v && npm -v && gitleaks version && npm ci && git diff --exit-code -- package-lock.json
+
+Output (Exit code: 0):
+  v24.22.2
+  11.19.1
+  8.30.1
+  added 463 packages, and audited 464 packages in 6s
+
+================================================================================
+3. LOCKED IMAGE DIGEST VERIFICATION, MIGRATION PREVIEW/UP & SEED (AC-01, AC-02)
+================================================================================
+Command:
+  npm run env:test:start && npm run env:test:health && npm run db:migrate:preview && npm run db:migrate:up && npm run env:test:seed
+
+Output (Exit code: 0):
+  [env:test:start] Context=colima-baocaobanhang | Daemon=linux/aarch64 (Server 29.5.2) | PlatformKey=linux/arm64
+  [env:test:start] Verified PostgreSQL digest: postgres@sha256:ede0133b5b300f7609629c2bd8ac2cf8cbaf830527200ea2cbecf80f4481f2d3 (linux/arm64)
+  [env:test:start] Verified Keycloak digest: quay.io/keycloak/keycloak@sha256:923a431c08971d49727a857e64870d8d63b5bf294a730e5dde729b5138c26c9e (linux/arm64)
+  [env:test:start] PostgreSQL 18.7 and Keycloak 26.8.2 are healthy on loopback 127.0.0.1. Ephemeral config written to .env.devtest.local (mode 0600).
+  [env:test:health] PASS — baocaobanhang-s1a-postgres (5432/tcp -> 127.0.0.1:55432) and baocaobanhang-s1a-keycloak (8080/tcp -> 127.0.0.1:8080) are healthy.
+  [db:migrate:preview] Target verified: 127.0.0.1:55432/branch_sales_devtest (5465 bytes in 0001_s1a_foundation.sql)
+  [db:migrate:up] Completed on 127.0.0.1:55432/branch_sales_devtest. Applied migrations: 0001_s1a_foundation
+  [env:test:seed] Seeded 3 synthetic departments (KHCN, KHDN, DVKH) and 13 synthetic Keycloak/DB fixtures in realm "branch-sales-dev".
+
+================================================================================
+4. LINT, FORMAT, TYPECHECK, UNIT, INTEGRATION & E2E GATES (AC-02..AC-09)
+================================================================================
+- `npm run lint` -> Exit code: 0 (0 errors, 0 warnings)
+- `npm run format:check` -> Exit code: 0 (All matched files use Prettier code style)
+- `npm run typecheck` -> Exit code: 0 (`tsc --noEmit`)
+- `npm run test:unit` -> Exit code: 0 (3 test files, 15 passed)
+- `npm run test:integration` -> Exit code: 0 (1 test file, 13 passed on real PostgreSQL 18.7 + Keycloak 26.8.2)
+- `npm run build` -> Exit code: 0 (Next.js 16.4.6 production build)
+- `npm run test:e2e` -> Exit code: 0 (4 passed on Chromium against production server + real Keycloak + PostgreSQL)
+
+================================================================================
+5. FAIL-CLOSED PROOF (BREAK -> FAIL -> RESTORE -> PASS) (AC-09)
+================================================================================
+1. Break: Replaced `selfContext.staff_code` in `src/app/workspace/page.tsx` with `INVALID_STAFF_CODE_FOR_FAIL_CLOSED_PROOF` and ran `npm run build && npm run test:e2e`.
+   Result: Exit code 1 (1 failed: Expected "SYN-MGR-KHCN", Received "INVALID_STAFF_CODE_FOR_FAIL_CLOSED_PROOF").
+2. Restore: Restored `src/app/workspace/page.tsx` to `{selfContext.staff_code}` and re-ran `npm run build && npm run test:e2e`.
+   Result: Exit code 0 (4 passed).
+
+================================================================================
+6. SECURITY SCAN & NPM AUDIT DISCLOSURE (AC-08)
+================================================================================
+- `npm run security` (Gitleaks 8.30.1 full Git history scan + `npm audit --audit-level=high`) -> Exit code: 0
+  - High / Critical vulnerabilities: 0
+  - Moderate vulnerabilities (disclosed per AC-08): 9 moderate advisories in dev-only dependencies (`glob` / `minimatch` under `node-pg-migrate` and `@typescript-eslint/*`); 0 runtime vulnerabilities. Fixing via `npm audit fix --force` would downgrade `node-pg-migrate` across major versions (`7.6.1`), violating the approved `9.0.0` pin in `docs/decisions/SPRINT-1-APPROVAL.md`.
+
+================================================================================
+7. INDEPENDENT CHALLENGER QA & SECURITY REVIEW (AC-10)
+================================================================================
+- Reviewer: `challenger-qa` subagent (independent read-only context `f21bf17e-45bb-49aa-8c1f-4d67223862a8`)
+- Verdict: PASS (0 Critical, 0 High, 0 Medium; 1 Low narrative cleanup in `tasks/TASK-0003.md` resolved)
+- Verified AC-01..AC-10, strict S1-A synthetic scope boundaries (zero S1-B Org CRUD or S1-C role assignment endpoints), exact dependency and multi-arch digest pins, 7-table schema and least-privilege `app_runtime_role` separation, OIDC PKCE S256 + state + nonce + one-time `AuthTransaction` consumption, `AES-256-GCM` token encryption and `SHA-256` session token hashing, `[start, end)` half-open interval enforcement, per-request DB re-evaluation, audit redaction and failure semantics, and fail-closed GitHub Actions CI.

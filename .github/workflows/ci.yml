@@ -71,16 +71,37 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
+      - name: Start locked synthetic test environment (PostgreSQL 18.7 + Keycloak 26.8.2)
+        run: |
+          npm run env:test:start
+          npm run env:test:health
+
+      - name: Preview and apply versioned S1-A schema migrations (and verify idempotency)
+        run: |
+          npm run db:migrate:preview
+          npm run db:migrate:up
+          npm run db:migrate:up
+
+      - name: Seed synthetic S1-A departments, staff, identity links, and role assignments
+        run: npm run env:test:seed
+
+      - name: Integration tests on real PostgreSQL 18.7 and Keycloak 26.8.2
+        run: npm run test:integration
+
       - name: Build production bundle
         run: npm run build
 
       - name: Install Playwright Chromium browser
-        # ubuntu-24.04 already includes the shared libraries used by this smoke suite.
+        # ubuntu-24.04 already includes the shared libraries used by this suite.
         # E2E remains mandatory and fails if a future runner image lacks them.
         run: npx playwright install chromium
 
-      - name: E2E tests on local production server
+      - name: E2E tests on local production server with real Keycloak and PostgreSQL
         run: npm run test:e2e
+
+      - name: Stop verified synthetic test environment (preserve data)
+        if: always()
+        run: npm run env:test:stop
 
       - name: Security gates (Gitleaks + npm audit)
         run: |
