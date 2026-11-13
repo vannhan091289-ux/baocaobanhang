@@ -18,7 +18,7 @@ import {
 } from "../../scripts/seed-s1a.mjs";
 import { ensureDevtestEnvLoaded, getRuntimeConfig } from "@/server/config";
 import { hashOpaqueToken, encryptVerifierAes256Gcm } from "@/server/crypto";
-import { closeRuntimePool, getRuntimePool } from "@/server/db";
+import { closeRuntimePool, getRuntimePool, type Queryable } from "@/server/db";
 import {
   clearOidcConfigCache,
   completeOidcCallback,
@@ -907,6 +907,49 @@ describe("AC-05 & AC-06: Session Lifecycle, Immediate Revocation on Role/Departm
       await migratorPool.query(
         "UPDATE staff SET department_id=$1 WHERE id=$2",
         [original.rows[0]!.department_id, staffId],
+      );
+    }
+  });
+
+  it("denies an old cookie if its role changes between the session read and guarded refresh", async () => {
+    const user = SYNTHETIC_USERS.find((u) => u.key === "staff_khcn")!;
+    const identity = (
+      await migratorPool.query<{ issuer: string; subject: string }>(
+        "SELECT issuer, subject FROM identity_links WHERE staff_id=$1 AND status='ACTIVE'",
+        [user.staff!.id],
+      )
+    ).rows[0]!;
+    const session = await establishSessionFromVerifiedOidcIdentity(identity);
+    expect(session.decision).toBe("ALLOW");
+    if (session.decision !== "ALLOW")
+      throw new Error("Fixture could not establish a session");
+    const role = user.roleAssignments[0]!;
+    let changed = false;
+    const racingDb: Queryable = {
+      async query(text, values) {
+        if (!changed && text.includes("FROM role_assignments")) {
+          changed = true;
+          await migratorPool.query(
+            "UPDATE role_assignments SET role_code='EXECUTIVE', scope_type='BRANCH' WHERE id=$1",
+            [role.id],
+          );
+        }
+        return getRuntimePool().query(text, values);
+      },
+    };
+    try {
+      const result = await verifyRequestSession({
+        rawSessionToken: session.rawSessionToken,
+        db: racingDb,
+      });
+      expect(changed).toBe(true);
+      expect(result.authenticated).toBe(false);
+      if (!result.authenticated)
+        expect(result.reasonCode).toBe("SESSION_REVOKED");
+    } finally {
+      await migratorPool.query(
+        "UPDATE role_assignments SET role_code=$1, scope_type=$2, scope_department_id=$3 WHERE id=$4",
+        [role.role_code, role.scope_type, role.scope_department_id, role.id],
       );
     }
   });

@@ -656,12 +656,23 @@ export async function verifyRequestSession(params: {
   }
 
   // Refresh last_seen_at without extending absolute_expires_at
-  await db.query(
+  const refreshed = await db.query(
     `UPDATE sessions
      SET last_seen_at = $1
-     WHERE id = $2 AND revoked_at IS NULL`,
+     WHERE id = $2 AND revoked_at IS NULL
+     RETURNING id`,
     [now.toISOString(), session.id],
   );
+
+  // A concurrent authority mutation can revoke after our initial read. Never
+  // authorize with freshly-read authority if this old cookie could not refresh.
+  if (refreshed.rowCount !== 1) {
+    return {
+      authenticated: false,
+      httpStatus: 401,
+      reasonCode: "SESSION_REVOKED",
+    };
+  }
 
   return {
     authenticated: true,
