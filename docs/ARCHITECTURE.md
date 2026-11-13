@@ -1,6 +1,6 @@
 # Architecture baseline — stack Sprint 0 đã duyệt, production còn mở
 
-[ADR-001](adr/ADR-001-stack.md) được ACCEPTED ngày 2026-11-11 cho scaffold/toolchain TASK-0001; Next.js App Router + React + TypeScript strict, npm và test/security tooling theo version baseline trong ADR. SSO/auth hoãn khỏi Sprint 0 theo D-08; không database hoặc chức năng nghiệp vụ.
+[ADR-001](adr/ADR-001-stack.md) được `ACCEPTED` ngày 2026-11-11 cho scaffold/toolchain [TASK-0001](../tasks/TASK-0001.md); Next.js App Router + React + TypeScript strict, npm và test/security tooling theo version baseline trong ADR. SSO/auth hoãn khỏi Sprint 0 theo `D-08`; không database hoặc chức năng nghiệp vụ trong nền tảng Sprint 0.
 
 Ưu tiên modular monolith và PostgreSQL/TypeScript nếu phù hợp với stack được phê duyệt. Không xây microservices, message broker hoặc engine AI khi chưa cần.
 
@@ -15,7 +15,8 @@ Organization & Authorization; KPI definitions/Targets/Actuals; WeeklyPlans/Activ
 - Thay đổi chỉ tiêu, sửa Actual, chuyển Lead, đóng cảnh báo phải audit và có khả năng truy vết.
 - Không ấn định đường dẫn code trước khi scaffold/stack được chốt; mỗi TASK sau đó phải xác định file thật và tác động schema/API.
 
-## Trạng thái ADR
-ADR-001: stack/cấu trúc Sprint 0 `ACCEPTED`, không duyệt kiến trúc production. [ADR-002](adr/ADR-002-authorization.md): RBAC/data scope; ADR-003: KPI facts/reconciliation; ADR-004: event/notification channels; ADR-005: customer reference/data restrictions vẫn `PROPOSED`. Modular monolith/PostgreSQL là định hướng cho giai đoạn nghiệp vụ, chưa cho phép triển khai ở Sprint 0.
-
-[TASK-0002](../tasks/TASK-0002.md) chuẩn bị [đặc tả Sprint 1](specs/SPRINT-1.md) và phương án phê duyệt; chưa code auth/database. D-08/D-09 và ADR-002 là gate trước các task implementation tương ứng.
+## Trạng thái ADR và đặc tả hiện hành
+- [ADR-001](adr/ADR-001-stack.md): stack/cấu trúc Sprint 0 — `ACCEPTED` (chỉ phạm vi Sprint 0; không duyệt kiến trúc production).
+- [ADR-002](adr/ADR-002-authorization.md): mô hình phân quyền RBAC, `data scope` (`BRANCH` / `DEPARTMENT` / `SELF`), `default-deny` và kiểm toán cho Sprint 1 — `PROPOSED` (chờ Chủ dự án phê duyệt; chưa cấp quyền viết code).
+- `ADR-003` (KPI facts/reconciliation), `ADR-004` (event/notification channels), `ADR-005` (customer reference/data restrictions): vẫn `PROPOSED` / chưa khởi tạo chi tiết.
+- [docs/specs/SPRINT-1.md](specs/SPRINT-1.md): đặc tả dự thảo Sprint 1 (`DRAFT`) và phân tích phương án cho các quyết định mở `D-08` (IdP/SSO/session) và `D-09` (Database/ORM dev/test) trong [docs/DECISIONS.md](DECISIONS.md), được thực hiện theo [TASK-0002](../tasks/TASK-0002.md) (`DOCUMENTATION_ONLY`). Cả `D-08`, `D-09` và `ADR-002` đều là gate bắt buộc phải được duyệt trước các task triển khai mã nguồn tương ứng.
