@@ -1254,11 +1254,64 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
           digest(original.rows[0]!.data),
         );
       }
-      const constraints =
-        "SELECT conname, contype, pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE connamespace='public'::regnamespace ORDER BY conname";
-      expect((await restored.query(constraints)).rows).toEqual(
-        (await admin.query(constraints)).rows,
+      const columns =
+        "SELECT table_name,column_name,ordinal_position,data_type,udt_name,is_nullable,character_maximum_length,numeric_precision,numeric_scale,datetime_precision FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position";
+      expect((await restored.query(columns)).rows).toEqual(
+        (await admin.query(columns)).rows,
       );
+      const constraints =
+        "SELECT t.relname AS table_name, c.conname, c.contype, c.convalidated, c.condeferrable, c.condeferred, c.conkey, c.confkey, c.confupdtype, c.confdeltype, pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid WHERE c.connamespace='public'::regnamespace ORDER BY t.relname,c.conname";
+      const sourceConstraints = (await admin.query(constraints)).rows;
+      const copyConstraints = (await restored.query(constraints)).rows;
+      const metadata = (rows: typeof sourceConstraints) =>
+        rows.map(({ definition: _definition, ...rest }) => {
+          void _definition;
+          return rest;
+        });
+      expect(metadata(copyConstraints)).toEqual(metadata(sourceConstraints));
+      for (let index = 0; index < sourceConstraints.length; index++) {
+        const sourceConstraint = sourceConstraints[index]!;
+        const copyConstraint = copyConstraints[index]!;
+        if (
+          sourceConstraint.contype === "c" &&
+          sourceConstraint.definition !== copyConstraint.definition
+        ) {
+          // pg_dump round-trips equivalent array casts into a different deparse form.
+          // Reparse BOTH CHECK definitions with the same PostgreSQL parser before comparing;
+          // retain exact comparisons for all other constraint kinds and all metadata above.
+          expect(
+            new Set([
+              "departments",
+              "staff",
+              "identity_links",
+              "role_assignments",
+              "sessions",
+              "auth_transactions",
+              "audit_events",
+            ]).has(sourceConstraint.table_name),
+          ).toBe(true);
+          const scratch = `check_roundtrip_${index}`;
+          await restored.query(
+            `CREATE TEMP TABLE "${scratch}" (LIKE public."${sourceConstraint.table_name}")`,
+          );
+          await restored.query(
+            `ALTER TABLE "${scratch}" ADD CONSTRAINT source_check ${sourceConstraint.definition}`,
+          );
+          await restored.query(
+            `ALTER TABLE "${scratch}" ADD CONSTRAINT restored_check ${copyConstraint.definition}`,
+          );
+          const normalized = await restored.query<{ definition: string }>(
+            "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=to_regclass($1) AND conname IN ('source_check','restored_check') ORDER BY conname",
+            [scratch],
+          );
+          expect(normalized.rowCount).toBe(2);
+          expect(normalized.rows[0]!.definition).toBe(
+            normalized.rows[1]!.definition,
+          );
+        } else {
+          expect(copyConstraint.definition).toBe(sourceConstraint.definition);
+        }
+      }
       // Preserve the new copy for inspection. No DROP/down/reset or overwrite of an existing target.
       console.log(
         `[restore-proof] Created and verified synthetic copy ${backupDatabase}; no existing database/schema was deleted.`,
