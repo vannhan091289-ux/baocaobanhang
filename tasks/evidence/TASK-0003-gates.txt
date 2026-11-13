@@ -1,3 +1,6 @@
+HISTORICAL AUTHOR EVIDENCE AT PR6 HEAD 035d9cc — NOT FINAL ACCEPTANCE AFTER REVIEW FIXES
+See TASK-0003-review.md for findings, remediation and final-head ledger.
+
 # TASK-0003 (Sprint 1 — S1-A) Quality, Integration, E2E & Security Gate Evidence Log
 Base branch: main (04e7af0738e3ba90f04dca8c456b87328aeaf6b8)
 Feature branch: feat/TASK-0003-s1a-identity-foundation

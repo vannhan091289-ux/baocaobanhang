@@ -15,16 +15,9 @@ const ipBuckets = new Map<string, BucketEntry>();
  * (per docs/decisions/SPRINT-1-APPROVAL.md §2).
  */
 export function resolveDirectClientIp(request: Request): string {
-  // In Next.js local/CI Node server on 127.0.0.1, direct socket or fallback loopback is used.
-  // We intentionally ignore X-Forwarded-For / X-Real-IP from untrusted clients.
-  const testPeerOverride = request.headers.get("x-devtest-direct-peer");
-  if (
-    process.env.APP_ENV === "test" &&
-    testPeerOverride &&
-    /^[0-9a-fA-F:._-]{1,64}$/.test(testPeerOverride)
-  ) {
-    return testPeerOverride;
-  }
+  // S1-A is bound to loopback. Request headers are never a trusted peer source,
+  // including in APP_ENV=test, which is also the real local/CI application profile.
+  void request;
   return "127.0.0.1";
 }
 

@@ -382,103 +382,94 @@ export async function establishSessionFromVerifiedOidcIdentity(params: {
   const now = params.now ?? new Date();
   const safeSubjectRef = createSafeSubjectRef(params.issuer, params.subject);
 
-  const graph = await loadIdentityGraphByIssuerSubject(
-    pool,
-    params.issuer,
-    params.subject,
-  );
-
-  const evalResult = evaluateIdentityAndRolePolicy({
-    now,
-    identityLink: graph.identityLink,
-    staff: graph.staff,
-    department: graph.department,
-    roleAssignments: graph.roleAssignments,
-  });
-
-  if (evalResult.decision === "DENY") {
-    await recordDenyAuditSafely(pool, {
-      occurredAt: now,
-      actorStaffId: graph.staff?.id ?? null,
-      actorSubjectRef: safeSubjectRef,
-      action: "auth.login.callback",
-      resourceType: "session",
-      resourceId: "unissued",
-      scopeContext: {
-        reason: evalResult.reasonCode,
-      },
-      reasonCode: evalResult.reasonCode,
-    });
-
-    return {
-      decision: "DENY",
-      httpStatus: 403,
-      reasonCode: evalResult.reasonCode,
-    };
-  }
-
-  const rawSessionToken = generateOpaqueToken(32); // 256-bit random opaque token
-  const tokenHash = hashOpaqueToken(rawSessionToken);
-  const csrfToken = generateOpaqueToken(32);
-  const sessionId = randomUUID();
-  const absoluteExpiresAt = new Date(
-    now.getTime() + SESSION_ABSOLUTE_TIMEOUT_MS,
-  );
-
+  let denialAudit: Parameters<typeof recordDenyAuditSafely>[1] | undefined;
   try {
-    await withTransaction(async (client) => {
-      await client.query(
-        `INSERT INTO sessions (
-           id, token_hash, staff_id, identity_link_id, role_assignment_id,
-           csrf_token, created_at, last_seen_at, absolute_expires_at,
-           revoked_at, revoked_reason
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, NULL)`,
-        [
+    const result = await withTransaction<EstablishSessionResult>(
+      async (client) => {
+        // Same transaction-scoped lock used by BEFORE STATEMENT authority triggers.
+        // No UPDATE privilege on organization/role tables is granted to the runtime.
+        await client.query("SELECT lock_s1a_authority()");
+        const graph = await loadIdentityGraphByIssuerSubject(
+          client,
+          params.issuer,
+          params.subject,
+        );
+        const evalResult = evaluateIdentityAndRolePolicy({ now, ...graph });
+        if (evalResult.decision === "DENY") {
+          denialAudit = {
+            occurredAt: now,
+            actorStaffId: graph.staff?.id ?? null,
+            actorSubjectRef: safeSubjectRef,
+            action: "auth.login.callback",
+            resourceType: "session",
+            resourceId: "unissued",
+            scopeContext: { reason: evalResult.reasonCode },
+            reasonCode: evalResult.reasonCode,
+          };
+          return {
+            decision: "DENY",
+            httpStatus: 403,
+            reasonCode: evalResult.reasonCode,
+          };
+        }
+        const rawSessionToken = generateOpaqueToken(32);
+        const csrfToken = generateOpaqueToken(32);
+        const sessionId = randomUUID();
+        const absoluteExpiresAt = new Date(
+          now.getTime() + SESSION_ABSOLUTE_TIMEOUT_MS,
+        );
+        await client.query(
+          `INSERT INTO sessions (id, token_hash, staff_id, identity_link_id, role_assignment_id,
+           csrf_token, created_at, last_seen_at, absolute_expires_at, revoked_at, revoked_reason)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,NULL)`,
+          [
+            sessionId,
+            hashOpaqueToken(rawSessionToken),
+            evalResult.selfContext.staff_id,
+            graph.identityLink!.id,
+            evalResult.effectiveAssignment.id,
+            csrfToken,
+            now.toISOString(),
+            now.toISOString(),
+            absoluteExpiresAt.toISOString(),
+          ],
+        );
+        await appendAuditEvent(client, {
+          occurredAt: now,
+          actorStaffId: evalResult.selfContext.staff_id,
+          actorSubjectRef: safeSubjectRef,
+          action: "auth.login.success",
+          resourceType: "session",
+          resourceId: sessionId,
+          scopeContext: {
+            role_code: evalResult.selfContext.effective_role.role_code,
+            scope_type: evalResult.selfContext.effective_role.scope_type,
+            department_code: evalResult.selfContext.department.code,
+          },
+          decision: "ALLOW",
+          reasonCode: evalResult.reasonCode,
+        });
+        return {
+          decision: "ALLOW",
           sessionId,
-          tokenHash,
-          evalResult.selfContext.staff_id,
-          graph.identityLink!.id,
-          evalResult.effectiveAssignment.id,
+          rawSessionToken,
           csrfToken,
-          now.toISOString(),
-          now.toISOString(),
-          absoluteExpiresAt.toISOString(),
-        ],
-      );
-
-      await appendAuditEvent(client, {
-        occurredAt: now,
-        actorStaffId: evalResult.selfContext.staff_id,
-        actorSubjectRef: safeSubjectRef,
-        action: "auth.login.success",
-        resourceType: "session",
-        resourceId: sessionId,
-        scopeContext: {
-          role_code: evalResult.selfContext.effective_role.role_code,
-          scope_type: evalResult.selfContext.effective_role.scope_type,
-          department_code: evalResult.selfContext.department.code,
-        },
-        decision: "ALLOW",
-        reasonCode: evalResult.reasonCode,
-      });
-    }, pool);
+          selfContext: evalResult.selfContext,
+          absoluteExpiresAt,
+        };
+      },
+      pool,
+    );
+    // A failed DENY audit must not poison a transaction and turn a policy DENY into success.
+    if (denialAudit) await recordDenyAuditSafely(pool, denialAudit);
+    return result;
   } catch {
-    // Audit or session insert failed inside transaction -> rollback occurred -> fail closed, no session issued!
     return {
       decision: "DENY",
       httpStatus: 500,
       reasonCode: "SESSION_OR_AUDIT_COMMIT_FAILED",
     };
   }
-
-  return {
-    decision: "ALLOW",
-    sessionId,
-    rawSessionToken,
-    csrfToken,
-    selfContext: evalResult.selfContext,
-    absoluteExpiresAt,
-  };
 }
 
 export type VerifySessionResult =

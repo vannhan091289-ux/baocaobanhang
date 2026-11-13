@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -30,32 +31,53 @@ const PG_CONTAINER_NAME = "baocaobanhang-s1a-postgres";
 const KC_CONTAINER_NAME = "baocaobanhang-s1a-keycloak";
 const PG_HOST_PORT = 55432;
 const KC_HOST_PORT = 8080;
+const OWNER_LABEL = createHash("sha256").update(process.cwd()).digest("hex");
 const ENV_FILE_PATH = path.resolve(process.cwd(), ".env.devtest.local");
 
 function resolveDockerContext() {
-  if (process.env.DOCKER_CONTEXT) {
-    return process.env.DOCKER_CONTEXT;
-  }
-  try {
-    const out = execFileSync(
-      "docker",
-      ["context", "ls", "--format", "{{.Name}}"],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      },
+  const expected =
+    process.platform === "darwin" ? "colima-baocaobanhang" : "default";
+  if (
+    process.platform !== "darwin" &&
+    !(process.platform === "linux" && process.env.GITHUB_ACTIONS === "true")
+  ) {
+    throw new Error(
+      "[ENV_REFUSED] Only the approved Mac profile or GitHub Linux CI may run this harness.",
     );
-    const contexts = out
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (contexts.includes("colima-baocaobanhang")) {
-      return "colima-baocaobanhang";
-    }
-  } catch {
-    // Fallback to default context when colima-baocaobanhang does not exist (e.g., Linux CI)
   }
-  return undefined;
+  if (process.env.DOCKER_CONTEXT && process.env.DOCKER_CONTEXT !== expected) {
+    throw new Error(
+      "[ENV_REFUSED] Docker context is outside the approved local profile.",
+    );
+  }
+  const endpoint = execFileSync(
+    "docker",
+    ["context", "inspect", expected, "--format", "{{.Endpoints.docker.Host}}"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  ).trim();
+  const allowedEndpoint =
+    process.platform === "darwin"
+      ? `unix://${os.homedir()}/.colima/baocaobanhang/docker.sock`
+      : "unix:///var/run/docker.sock";
+  if (endpoint !== allowedEndpoint)
+    throw new Error(
+      "[ENV_REFUSED] Docker endpoint is not the approved local Unix socket.",
+    );
+  return expected;
+}
+
+function verifyOwnership(name) {
+  const owner = runDocker([
+    "inspect",
+    name,
+    "--format",
+    '{{index .Config.Labels "baocaobanhang.s1a.owner"}}',
+  ]);
+  if (owner !== OWNER_LABEL) {
+    throw new Error(
+      "[ENV_REFUSED] Container ownership does not match this project directory; preserving it.",
+    );
+  }
 }
 
 function runDocker(args, options = {}) {
@@ -244,6 +266,9 @@ async function provisionDatabaseRoles({
     }
 
     await adminClient.query(
+      "REVOKE TEMPORARY ON DATABASE branch_sales_devtest FROM PUBLIC",
+    );
+    await adminClient.query(
       "GRANT CONNECT ON DATABASE branch_sales_devtest TO migrator_role, app_runtime_role",
     );
   } finally {
@@ -289,12 +314,25 @@ async function startEnvironment() {
     `[env:test:start] Context=${ctx ?? "default"} | Daemon=${osArch} (Server ${serverVersion}) | PlatformKey=${platformKey}`,
   );
 
-  // If our own project containers are already running and healthy, reuse or recreate cleanly
-  if (containerExists(PG_CONTAINER_NAME)) {
-    runDocker(["rm", "-f", PG_CONTAINER_NAME]);
-  }
-  if (containerExists(KC_CONTAINER_NAME)) {
-    runDocker(["rm", "-f", KC_CONTAINER_NAME]);
+  // Reuse only verified resources and the same private environment; never recreate/reset.
+  const pgExists = containerExists(PG_CONTAINER_NAME);
+  const kcExists = containerExists(KC_CONTAINER_NAME);
+  if (pgExists || kcExists) {
+    if (!pgExists || !kcExists || !existsSync(ENV_FILE_PATH)) {
+      throw new Error(
+        "[ENV_REFUSED] Incomplete existing environment; preserving containers and data.",
+      );
+    }
+    verifyOwnership(PG_CONTAINER_NAME);
+    verifyOwnership(KC_CONTAINER_NAME);
+    for (const name of [PG_CONTAINER_NAME, KC_CONTAINER_NAME]) {
+      if (!isContainerRunning(name)) runDocker(["start", name]);
+    }
+    await checkHealth();
+    console.log(
+      "[env:test:start] Reused verified environment without resetting data/secrets.",
+    );
+    return;
   }
 
   // Verify ports 127.0.0.1:55432 and 127.0.0.1:8080 are free (do not kill other users' containers)
@@ -356,6 +394,8 @@ async function startEnvironment() {
     "-d",
     "--name",
     PG_CONTAINER_NAME,
+    "--label",
+    `baocaobanhang.s1a.owner=${OWNER_LABEL}`,
     "-p",
     `127.0.0.1:${PG_HOST_PORT}:5432`,
     "-e",
@@ -371,6 +411,8 @@ async function startEnvironment() {
     "-d",
     "--name",
     KC_CONTAINER_NAME,
+    "--label",
+    `baocaobanhang.s1a.owner=${OWNER_LABEL}`,
     "-p",
     `127.0.0.1:${KC_HOST_PORT}:8080`,
     "-e",
@@ -454,17 +496,16 @@ async function checkHealth() {
 }
 
 async function stopEnvironment() {
-  if (containerExists(KC_CONTAINER_NAME)) {
-    runDocker(["rm", "-f", KC_CONTAINER_NAME]);
-  }
-  if (containerExists(PG_CONTAINER_NAME)) {
-    runDocker(["rm", "-f", PG_CONTAINER_NAME]);
-  }
-  if (existsSync(ENV_FILE_PATH)) {
-    rmSync(ENV_FILE_PATH, { force: true });
+  // Check every existing resource before stopping either; keep containers, data and env.
+  const existing = [KC_CONTAINER_NAME, PG_CONTAINER_NAME].filter(
+    containerExists,
+  );
+  for (const name of existing) verifyOwnership(name);
+  for (const name of existing) {
+    if (isContainerRunning(name)) runDocker(["stop", name]);
   }
   console.log(
-    "[env:test:stop] Stopped and removed project test containers and ephemeral .env.devtest.local.",
+    "[env:test:stop] Stopped verified project containers; preserved data and private environment.",
   );
 }
 

@@ -99,7 +99,7 @@ jobs:
       - name: E2E tests on local production server with real Keycloak and PostgreSQL
         run: npm run test:e2e
 
-      - name: Stop and clean up synthetic test environment before security scan
+      - name: Stop verified synthetic test environment (preserve data)
         if: always()
         run: npm run env:test:stop
 

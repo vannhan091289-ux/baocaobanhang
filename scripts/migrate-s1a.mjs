@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runner } from "node-pg-migrate";
@@ -91,8 +91,20 @@ export async function runMigrations({
   const target = validateMigrationTarget({ appEnv, databaseUrl });
 
   if (mode === "preview") {
-    const sqlPath = path.join(migrationsDir, "0001_s1a_foundation.sql");
-    const sqlPreview = readFileSync(sqlPath, "utf8");
+    // Full ordered SQL inventory is a conservative preview superset: never omit
+    // a migration that `up` may execute. Already-applied migrations may be shown.
+    const sqlFiles = readdirSync(migrationsDir)
+      .filter((name) => /^\d+.*\.sql$/.test(name))
+      .sort();
+    if (sqlFiles.length === 0)
+      throw new Error("[MIGRATION_REFUSED] No versioned SQL migrations found.");
+    const sqlPath = migrationsDir;
+    const sqlPreview = sqlFiles
+      .map(
+        (name) =>
+          `-- FILE: ${name}\n${readFileSync(path.join(migrationsDir, name), "utf8")}`,
+      )
+      .join("\n");
     return {
       mode: "preview",
       target,
@@ -136,7 +148,7 @@ async function main() {
   const result = await runMigrations({ mode });
   if (result.mode === "preview") {
     console.log(
-      `[db:migrate:preview] Target verified: ${result.target.host}:${result.target.port}/${result.target.dbName} (${result.sqlByteLength} bytes in 0001_s1a_foundation.sql)`,
+      `[db:migrate:preview] Target verified: ${result.target.host}:${result.target.port}/${result.target.dbName} (${result.sqlByteLength} bytes across ordered migration inventory)`,
     );
     console.log("--- SQL PREVIEW START ---");
     console.log(result.sqlPreview);

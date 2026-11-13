@@ -9,6 +9,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { validateMigrationTarget } from "./migrate-s1a.mjs";
 
 /**
  * Deterministic Synthetic UUIDs and Fixtures for S1-A (Scope: DEVTEST).
@@ -678,6 +679,23 @@ async function main() {
     );
   }
 
+  // Refuse out-of-scope targets before any IdP or database mutation.
+  validateMigrationTarget({
+    appEnv: process.env.APP_ENV ?? envMap.APP_ENV,
+    databaseUrl: migratorUrl,
+  });
+  if (
+    new URL(migratorUrl).username !== "migrator_role" ||
+    adminUrl !== "http://127.0.0.1:8080" ||
+    oidcIssuer !== "http://127.0.0.1:8080/realms/branch-sales-dev" ||
+    oidcClientId !== "branch-sales-web" ||
+    oidcRedirectUri !== "http://127.0.0.1:3100/auth/callback"
+  ) {
+    throw new Error(
+      "[SEED_REFUSED] Only the approved synthetic migrator/IdP profile may be seeded.",
+    );
+  }
+
   const syntheticUserPassword =
     process.env.SYNTHETIC_USER_PASSWORD ??
     envMap.SYNTHETIC_USER_PASSWORD ??
@@ -721,19 +739,12 @@ async function main() {
   try {
     await client.query("BEGIN");
 
-    // Clean ephemeral sessions/transactions/existing rows for deterministic seed re-runs
-    await client.query("DELETE FROM auth_transactions");
-    await client.query("DELETE FROM sessions");
-    await client.query("DELETE FROM audit_events");
-    await client.query("DELETE FROM role_assignments");
-    await client.query("DELETE FROM identity_links");
-    await client.query("DELETE FROM staff");
-    await client.query("DELETE FROM departments");
-
+    // Preserve existing sessions, audit and mappings. Re-running seed only adds
+    // missing deterministic fixtures; it never resets existing data or grants.
     for (const dept of Object.values(SYNTHETIC_DEPARTMENTS)) {
       await client.query(
         `INSERT INTO departments (id, code, name, status)
-         VALUES ($1, $2, $3, $4)`,
+         VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
         [dept.id, dept.code, dept.name, dept.status],
       );
     }
@@ -742,7 +753,7 @@ async function main() {
       if (!userDef.staff) continue;
       await client.query(
         `INSERT INTO staff (id, staff_code, display_name, department_id, status)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
         [
           userDef.staff.id,
           userDef.staff.staff_code,
@@ -756,7 +767,7 @@ async function main() {
         const sub = subjectByKey[userDef.key];
         await client.query(
           `INSERT INTO identity_links (id, issuer, subject, staff_id, status)
-           VALUES ($1, $2, $3, $4, $5)`,
+           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
           [
             userDef.identityLink.id,
             oidcIssuer,
@@ -772,7 +783,7 @@ async function main() {
           `INSERT INTO role_assignments (
              id, staff_id, role_code, scope_type, scope_department_id,
              effective_from, effective_to, status, approval_reference
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO NOTHING`,
           [
             ra.id,
             userDef.staff.id,

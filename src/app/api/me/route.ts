@@ -61,9 +61,15 @@ export async function GET(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   // Check if the caller attempted to query another staff_id or department_id or tamper with role/scope
-  const requestedStaffId = url.searchParams.get("staff_id") ?? undefined;
-  const requestedDepartmentId =
-    url.searchParams.get("department_id") ?? undefined;
+  const rawStaffId = url.searchParams.get("staff_id");
+  const rawDepartmentId = url.searchParams.get("department_id");
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const malformedReference = [rawStaffId, rawDepartmentId].some(
+    (value) => value !== null && !uuidPattern.test(value),
+  );
+  const requestedStaffId = rawStaffId?.toLowerCase();
+  const requestedDepartmentId = rawDepartmentId?.toLowerCase();
   const tamperedRole = url.searchParams.get("role");
   const tamperedScope = url.searchParams.get("scope");
 
@@ -92,6 +98,7 @@ export async function GET(request: Request): Promise<Response> {
   // In S1-A, /api/me only returns the caller's own self-context.
   // If a caller attempts to look up another staff_id or out-of-scope department_id, return uniform 404 envelope per ADR-002 §4 & §5.
   if (
+    malformedReference ||
     (requestedStaffId &&
       requestedStaffId !== sessionCheck.selfContext.staff_id) ||
     (requestedDepartmentId &&
@@ -103,7 +110,9 @@ export async function GET(request: Request): Promise<Response> {
       actorSubjectRef: `staff:${sessionCheck.selfContext.staff_id}`,
       action: "org.staff.read",
       resourceType: "staff",
-      resourceId: requestedStaffId ?? requestedDepartmentId ?? "unknown",
+      resourceId: malformedReference
+        ? "invalid-reference"
+        : (requestedStaffId ?? requestedDepartmentId ?? "unknown"),
       scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
       reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
     });

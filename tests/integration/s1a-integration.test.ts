@@ -1,3 +1,11 @@
+import { execFileSync } from "node:child_process";
+import {
+  createHash,
+  generateKeyPairSync,
+  randomUUID,
+  sign,
+  verify,
+} from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -9,7 +17,7 @@ import {
   SYNTHETIC_USERS,
 } from "../../scripts/seed-s1a.mjs";
 import { ensureDevtestEnvLoaded, getRuntimeConfig } from "@/server/config";
-import { hashOpaqueToken } from "@/server/crypto";
+import { hashOpaqueToken, encryptVerifierAes256Gcm } from "@/server/crypto";
 import { closeRuntimePool, getRuntimePool } from "@/server/db";
 import {
   clearOidcConfigCache,
@@ -224,6 +232,14 @@ describe("AC-02: 7-Table Schema, Migration Idempotency, Least-Privilege Runtime 
         runtimePool.query(`DELETE FROM ${protectedTable}`),
       ).rejects.toThrow(/permission denied/i);
     }
+
+    await expect(
+      runtimePool.query("SELECT * FROM audit_events"),
+    ).rejects.toThrow(/permission denied/i);
+
+    await expect(
+      runtimePool.query("CREATE TEMP TABLE unauthorized_runtime_temp (id INT)"),
+    ).rejects.toThrow(/permission denied/i);
 
     // Verify runtime role CANNOT UPDATE or DELETE on audit_events (append-only)
     await expect(
@@ -505,27 +521,25 @@ describe("AC-04: OIDC Protocol Tamper, Replay, Wrong Issuer/Audience/Signature/E
           userDef.username,
           syntheticUserPassword,
         );
-        // Replace encrypted verifier with another valid encrypted verifier that doesn't match code_challenge
-        const otherTx = await createAuthTransaction({
-          state: "other_state_for_wrong_pkce_123456789012",
-          nonce: "other_nonce_for_wrong_pkce_123456789012",
-          codeVerifier:
-            "wrong_pkce_code_verifier_that_does_not_match_challenge_123456789",
-        });
-        const wrongHash = hashOpaqueToken(otherTx.rawTxCookieToken);
+        // Keep GCM ciphertext/AAD valid while deliberately mismatching the S256 challenge.
         const origHash = hashOpaqueToken(start.data.rawTxCookieToken);
-        const otherRow = await runtimePool.query(
-          `SELECT id, state_value, verifier_ciphertext_b64, verifier_iv_b64, verifier_auth_tag_b64
-           FROM auth_transactions WHERE tx_cookie_hash = $1`,
-          [wrongHash],
+        const row = await runtimePool.query<{
+          id: string;
+          state_value: string;
+        }>(
+          `SELECT id, state_value FROM auth_transactions WHERE tx_cookie_hash = $1`,
+          [origHash],
         );
-        expect(otherRow.rowCount).toBe(1);
-        // Corrupt the ciphertext of the original transaction so decrypt or PKCE check fails
+        const tx = row.rows[0]!;
+        const wrong = encryptVerifierAes256Gcm(
+          "wrong_pkce_verifier_that_does_not_match_the_real_challenge_123456789",
+          cfg.authTxEncryptionKey,
+          `${tx.id}|${origHash}|${tx.state_value}`,
+        );
         await runtimePool.query(
-          `UPDATE auth_transactions
-           SET verifier_auth_tag_b64 = $1
-           WHERE tx_cookie_hash = $2`,
-          [otherRow.rows[0]!.verifier_auth_tag_b64, origHash],
+          `UPDATE auth_transactions SET verifier_ciphertext_b64=$1,
+             verifier_iv_b64=$2, verifier_auth_tag_b64=$3 WHERE tx_cookie_hash=$4`,
+          [wrong.ciphertextB64, wrong.ivB64, wrong.authTagB64, origHash],
         );
         const res = await completeOidcCallback({
           callbackUrl,
@@ -533,8 +547,8 @@ describe("AC-04: OIDC Protocol Tamper, Replay, Wrong Issuer/Audience/Signature/E
         });
         expect(res).toEqual({
           decision: "DENY",
-          httpStatus: 400,
-          reasonCode: "AUTH_TX_VERIFIER_DECRYPT_FAILED",
+          httpStatus: 401,
+          reasonCode: "OIDC_TOKEN_VALIDATION_FAILED",
         });
       }
     }
@@ -569,7 +583,20 @@ describe("AC-04: OIDC Protocol Tamper, Replay, Wrong Issuer/Audience/Signature/E
     }
 
     // Case C: Wrong Audience (`aud`), Wrong Issuer (`iss`), Expired ID Token (`exp`), and Tampered JWS Signature
+    // Negative-test wire seam only: real discovery/form login/code exchange remain in use.
+    // Re-sign changed claims and serve that test key via JWKS so claims cannot fail
+    // merely because the original signature became invalid. Happy-path proof stays real Keycloak.
+    const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+    });
+    const jwk = {
+      ...publicKey.export({ format: "jwk" }),
+      kid: "synthetic-negative-key",
+      use: "sig",
+      alg: "RS256",
+    };
     for (const tamperMode of [
+      "valid_control",
       "tamper_signature",
       "wrong_aud",
       "wrong_iss",
@@ -588,6 +615,14 @@ describe("AC-04: OIDC Protocol Tamper, Replay, Wrong Issuer/Audience/Signature/E
       clearOidcConfigCache();
       const customOidcConfig = await getOidcClientConfiguration(
         async (url, options) => {
+          if (
+            tamperMode !== "tamper_signature" &&
+            url.endsWith("/protocol/openid-connect/certs")
+          ) {
+            return new Response(JSON.stringify({ keys: [jwk] }), {
+              headers: { "content-type": "application/json" },
+            });
+          }
           const realRes = await fetch(url, options as RequestInit);
           if (!url.endsWith("/protocol/openid-connect/token")) {
             return realRes;
@@ -617,7 +652,15 @@ describe("AC-04: OIDC Protocol Tamper, Replay, Wrong Issuer/Audience/Signature/E
                 JSON.stringify(payload),
                 "utf8",
               ).toString("base64url");
-              body.id_token = `${parts[0]}.${newPayloadB64}.${parts[2]}`;
+              const header = Buffer.from(
+                JSON.stringify({ alg: "RS256", typ: "JWT", kid: jwk.kid }),
+              ).toString("base64url");
+              const signingInput = Buffer.from(`${header}.${newPayloadB64}`);
+              const signature = sign("RSA-SHA256", signingInput, privateKey);
+              expect(
+                verify("RSA-SHA256", signingInput, publicKey, signature),
+              ).toBe(true);
+              body.id_token = `${header}.${newPayloadB64}.${signature.toString("base64url")}`;
             }
           }
           return new Response(JSON.stringify(body), {
@@ -633,11 +676,24 @@ describe("AC-04: OIDC Protocol Tamper, Replay, Wrong Issuer/Audience/Signature/E
         oidcConfig: customOidcConfig,
       });
 
-      expect(res).toEqual({
-        decision: "DENY",
-        httpStatus: 401,
-        reasonCode: "OIDC_TOKEN_VALIDATION_FAILED",
-      });
+      if (tamperMode === "valid_control") {
+        // Calibration of the SAME negative-test JWKS seam, not real-IdP happy-path evidence.
+        expect(res.decision).toBe("ALLOW");
+        if (res.decision === "ALLOW") {
+          await revokeSessionOnLogout({
+            rawSessionToken: res.session.rawSessionToken,
+            submittedCsrfToken: res.session.csrfToken,
+            originHeader: cfg.appOrigin,
+          });
+        }
+      } else {
+        expect(res.decision).toBe("DENY"); // Avoid printing token/session data on failure.
+        expect(res).toEqual({
+          decision: "DENY",
+          httpStatus: 401,
+          reasonCode: "OIDC_TOKEN_VALIDATION_FAILED",
+        });
+      }
     }
   });
 });
@@ -677,8 +733,8 @@ describe("AC-05 & AC-06: Session Lifecycle, Immediate Revocation on Role/Departm
       const check2 = await verifyRequestSession({ rawSessionToken: rawToken });
       expect(check2).toEqual({
         authenticated: false,
-        httpStatus: 403,
-        reasonCode: "STAFF_INACTIVE",
+        httpStatus: 401,
+        reasonCode: "SESSION_REVOKED",
       });
     } finally {
       await migratorPool.query(
@@ -722,13 +778,135 @@ describe("AC-05 & AC-06: Session Lifecycle, Immediate Revocation on Role/Departm
       });
       expect(mgrCheck).toEqual({
         authenticated: false,
-        httpStatus: 403,
-        reasonCode: "ROLE_SCOPE_INVALID",
+        httpStatus: 401,
+        reasonCode: "SESSION_REVOKED",
       });
     } finally {
       await migratorPool.query(
         `UPDATE staff SET department_id = $1 WHERE id = $2`,
         [SYNTHETIC_DEPARTMENTS.KHDN.id, mgrDef.staff!.id],
+      );
+    }
+  });
+
+  it("waits for concurrent mapping changes before reading authority and issuing a session", async () => {
+    const user = SYNTHETIC_USERS.find((u) => u.key === "staff_khcn")!;
+    const identity = (
+      await migratorPool.query<{ id: string; issuer: string; subject: string }>(
+        "SELECT id, issuer, subject FROM identity_links WHERE staff_id=$1 AND status='ACTIVE'",
+        [user.staff!.id],
+      )
+    ).rows[0]!;
+    const writer = await migratorPool.connect();
+    const appName = `s1a_race_${randomUUID()}`;
+    const racePool = new pg.Pool({
+      connectionString: cfg.databaseUrl,
+      application_name: appName,
+      max: 1,
+    });
+    let pending:
+      ReturnType<typeof establishSessionFromVerifiedOidcIdentity> | undefined;
+    try {
+      await writer.query("BEGIN");
+      await writer.query("UPDATE identity_links SET subject=$1 WHERE id=$2", [
+        `changed-${randomUUID()}`,
+        identity.id,
+      ]);
+      pending = establishSessionFromVerifiedOidcIdentity({
+        issuer: identity.issuer,
+        subject: identity.subject,
+        pool: racePool,
+      });
+      let waiting = false;
+      const deadline = Date.now() + 5000;
+      while (!waiting && Date.now() < deadline) {
+        waiting = (
+          await migratorPool.query<{ waiting: boolean }>(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks l JOIN pg_stat_activity a USING (pid) WHERE a.application_name=$1 AND l.locktype='advisory' AND NOT l.granted) AS waiting",
+            [appName],
+          )
+        ).rows[0]!.waiting;
+        if (!waiting) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting).toBe(true);
+      await writer.query("COMMIT");
+      const result = await pending;
+      expect(result.decision).toBe("DENY");
+      if (result.decision === "DENY")
+        expect(result.reasonCode).toBe("IDENTITY_UNMAPPED");
+    } finally {
+      await writer.query("ROLLBACK");
+      writer.release();
+      if (pending) await pending.catch(() => undefined);
+      await racePool.end();
+      await migratorPool.query(
+        "UPDATE identity_links SET subject=$1 WHERE id=$2",
+        [identity.subject, identity.id],
+      );
+    }
+  });
+
+  it("revokes existing SELF sessions on same-ID role changes and department transfers", async () => {
+    const user = SYNTHETIC_USERS.find((u) => u.key === "staff_khcn")!;
+    const staffId = user.staff!.id;
+    const original = await migratorPool.query<{ department_id: string }>(
+      "SELECT department_id FROM staff WHERE id=$1",
+      [staffId],
+    );
+    const identity = await migratorPool.query<{
+      issuer: string;
+      subject: string;
+    }>(
+      "SELECT issuer, subject FROM identity_links WHERE staff_id=$1 AND status='ACTIVE'",
+      [staffId],
+    );
+    const role = user.roleAssignments[0]!;
+    const first = await establishSessionFromVerifiedOidcIdentity(
+      identity.rows[0]!,
+    );
+    expect(first.decision).toBe("ALLOW");
+    if (first.decision !== "ALLOW")
+      throw new Error("Fixture could not establish first session");
+    try {
+      await migratorPool.query(
+        "UPDATE role_assignments SET role_code='EXECUTIVE', scope_type='BRANCH' WHERE id=$1",
+        [role.id],
+      );
+      expect(
+        await verifyRequestSession({ rawSessionToken: first.rawSessionToken }),
+      ).toEqual({
+        authenticated: false,
+        httpStatus: 401,
+        reasonCode: "SESSION_REVOKED",
+      });
+    } finally {
+      await migratorPool.query(
+        "UPDATE role_assignments SET role_code=$1, scope_type=$2, scope_department_id=$3 WHERE id=$4",
+        [role.role_code, role.scope_type, role.scope_department_id, role.id],
+      );
+    }
+    const second = await establishSessionFromVerifiedOidcIdentity(
+      identity.rows[0]!,
+    );
+    expect(second.decision).toBe("ALLOW");
+    if (second.decision !== "ALLOW")
+      throw new Error("Fixture could not establish second session");
+    try {
+      await migratorPool.query(
+        "UPDATE staff SET department_id=$1 WHERE id=$2",
+        [SYNTHETIC_DEPARTMENTS.DVKH.id, staffId],
+      );
+      expect(
+        await verifyRequestSession({ rawSessionToken: second.rawSessionToken }),
+      ).toEqual({
+        authenticated: false,
+        httpStatus: 401,
+        reasonCode: "SESSION_REVOKED",
+      });
+    } finally {
+      await migratorPool.query(
+        "UPDATE staff SET department_id=$1 WHERE id=$2",
+        [original.rows[0]!.department_id, staffId],
       );
     }
   });
@@ -955,7 +1133,7 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
     });
 
     // Also verify no raw tokens/secrets/JWTs exist anywhere in audit_events
-    const auditDump = await getRuntimePool().query<{
+    const auditDump = await migratorPool.query<{
       actor_subject_ref: string;
       scope_context: unknown;
     }>(`SELECT actor_subject_ref, scope_context FROM audit_events`);
@@ -967,45 +1145,112 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
     }
   });
 
-  it("proves synthetic DB backup/restore on a copy preserves IdentityLink mappings and AuditEvent history without destructive down-migration (AC-10)", async () => {
-    const superuserUrl = process.env.SUPERUSER_DATABASE_URL!;
-    const adminClient = new pg.Client({ connectionString: superuserUrl });
-    await adminClient.connect();
+  it("restores a real pg_dump into a new synthetic database and preserves rows/constraints without deleting existing data (AC-10)", async () => {
+    const source = process.env.SUPERUSER_DATABASE_URL!;
+    const target = validateMigrationTarget({
+      appEnv: cfg.appEnv,
+      databaseUrl: source,
+    });
+    const backupDatabase = `s1a_restore_${randomUUID().replaceAll("-", "")}`;
+    const restoredUrl = new URL(source);
+    restoredUrl.pathname = `/${backupDatabase}`;
+    const admin = new pg.Client({ connectionString: source });
+    const restored = new pg.Client({
+      connectionString: restoredUrl.toString(),
+    });
+    const context =
+      process.env.DOCKER_CONTEXT ??
+      (process.platform === "darwin" ? "colima-baocaobanhang" : "default");
+    const tool = (args: string[], input?: Buffer): Buffer => {
+      try {
+        return execFileSync(
+          "docker",
+          [
+            "--context",
+            context,
+            "exec",
+            "-i",
+            "baocaobanhang-s1a-postgres",
+            ...args,
+          ],
+          {
+            input,
+            stdio: ["pipe", "pipe", "pipe"],
+            maxBuffer: 32 * 1024 * 1024,
+            timeout: 30_000,
+          },
+        );
+      } catch {
+        throw new Error(
+          "Synthetic backup/restore tool failed; raw dumps and credentials are withheld from logs",
+        );
+      }
+    };
+    await admin.connect();
     try {
-      await adminClient.query(
-        `DROP SCHEMA IF EXISTS s1a_restore_verify CASCADE`,
+      expect(
+        (
+          await admin.query("SELECT 1 FROM pg_database WHERE datname=$1", [
+            backupDatabase,
+          ])
+        ).rowCount,
+      ).toBe(0);
+      // Generated identifier contains only a fixed prefix and hexadecimal UUID.
+      await admin.query(
+        `CREATE DATABASE "${backupDatabase}" TEMPLATE template0`,
       );
-      await adminClient.query(`CREATE SCHEMA s1a_restore_verify`);
-      await adminClient.query(
-        `CREATE TABLE s1a_restore_verify.identity_links AS TABLE public.identity_links`,
+      const dump = tool([
+        "pg_dump",
+        "--username=postgres",
+        `--dbname=${target.dbName}`,
+        "--format=custom",
+        "--no-owner",
+        "--no-acl",
+        "--schema=public",
+      ]);
+      tool(
+        [
+          "pg_restore",
+          "--username=postgres",
+          `--dbname=${backupDatabase}`,
+          "--no-owner",
+          "--no-acl",
+          "--exit-on-error",
+        ],
+        dump,
       );
-      await adminClient.query(
-        `CREATE TABLE s1a_restore_verify.audit_events AS TABLE public.audit_events`,
+      await restored.connect();
+      for (const table of [
+        "departments",
+        "staff",
+        "identity_links",
+        "role_assignments",
+        "sessions",
+        "auth_transactions",
+        "audit_events",
+      ] as const) {
+        const query = `SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY id), '[]'::jsonb) AS data FROM public.${table} t`;
+        const original = await admin.query(query);
+        const copy = await restored.query(query);
+        const digest = (data: unknown) =>
+          createHash("sha256").update(JSON.stringify(data)).digest("hex");
+        // Hash comparisons avoid printing session/transaction data on assertion failure.
+        expect(digest(copy.rows[0]!.data), `${table} content hash`).toBe(
+          digest(original.rows[0]!.data),
+        );
+      }
+      const constraints =
+        "SELECT conname, contype, pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE connamespace='public'::regnamespace ORDER BY conname";
+      expect((await restored.query(constraints)).rows).toEqual(
+        (await admin.query(constraints)).rows,
       );
-
-      const origLinks = await adminClient.query<{ count: string }>(
-        `SELECT count(*)::text AS count FROM public.identity_links`,
-      );
-      const copyLinks = await adminClient.query<{ count: string }>(
-        `SELECT count(*)::text AS count FROM s1a_restore_verify.identity_links`,
-      );
-      expect(copyLinks.rows[0]?.count).toBe(origLinks.rows[0]?.count);
-      expect(Number(copyLinks.rows[0]?.count)).toBeGreaterThanOrEqual(12);
-
-      const origAudits = await adminClient.query<{ count: string }>(
-        `SELECT count(*)::text AS count FROM public.audit_events`,
-      );
-      const copyAudits = await adminClient.query<{ count: string }>(
-        `SELECT count(*)::text AS count FROM s1a_restore_verify.audit_events`,
-      );
-      expect(copyAudits.rows[0]?.count).toBe(origAudits.rows[0]?.count);
-      expect(Number(copyAudits.rows[0]?.count)).toBeGreaterThan(0);
-
-      await adminClient.query(
-        `DROP SCHEMA IF EXISTS s1a_restore_verify CASCADE`,
+      // Preserve the new copy for inspection. No DROP/down/reset or overwrite of an existing target.
+      console.log(
+        `[restore-proof] Created and verified synthetic copy ${backupDatabase}; no existing database/schema was deleted.`,
       );
     } finally {
-      await adminClient.end();
+      await restored.end();
+      await admin.end();
     }
-  });
+  }, 60_000);
 });

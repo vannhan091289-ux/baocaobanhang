@@ -85,7 +85,7 @@ npm run test:integration  # Chạy integration tests trên PostgreSQL 18.7 & Key
 npm run build             # Build production bundle
 npx playwright install chromium # Cài đặt trình duyệt Chromium (lần đầu)
 npm run test:e2e          # Chạy E2E tests (đăng nhập OIDC thật qua Keycloak -> /workspace -> /api/me -> POST /auth/logout)
-npm run env:test:stop     # Dừng và dọn dẹp container test cùng .env.devtest.local
+npm run env:test:stop     # Dừng container đã xác minh ownership; giữ dữ liệu và .env.devtest.local
 npm run security          # Chạy Gitleaks 8.30.1 full-history scan và npm audit (--audit-level=high)
 git diff --check          # Kiểm tra lỗi khoảng trắng trong Git diff
 ```
@@ -95,3 +95,11 @@ git diff --check          # Kiểm tra lỗi khoảng trắng trong Git diff
 - **Chỉ dùng dữ liệu synthetic (`Scope: DEVTEST`):** Toàn bộ tài khoản Keycloak (`realm: branch-sales-dev`) và bản ghi nhân sự/phòng ban trong PostgreSQL đều là dữ liệu giả lập phục vụ kiểm thử. Tuyệt đối không kết nối IdP doanh nghiệp thật (`D-10` vẫn `OPEN`) và không nạp dữ liệu nhân sự/khách hàng thật (`D-05` vẫn `OPEN`).
 - **Giới hạn Logout `S1-A`:** `POST /auth/logout` (kèm kiểm tra `Origin` và `CSRF token`) thu hồi bền vững phiên làm việc của ứng dụng trong bảng `sessions` và xóa cookie phiên; không cam kết hủy phiên SSO toàn cục tại IdP.
 - **Hoàn tác (Rollback) an toàn:** Khi hoàn tác mã nguồn hoặc khôi phục trên bản sao synthetic, hệ thống giữ nguyên lịch sử `identity_links` và `audit_events` (không chạy lệnh `down` phá hủy bảng hay xóa nhật ký kiểm toán).
+
+## Review hardening TASK-0003
+
+Migration additive `0002_revoke_changed_session_authority.sql` thu hồi session ngay trong transaction đổi quyền/phòng/trạng thái/mapping; bảy bảng và audit/mapping được giữ nguyên. Runtime audit chỉ INSERT; verification reads dùng migrator/test connection.
+
+Harness chỉ nhận context/Unix socket local đã duyệt, gắn ownership theo project directory. Start/stop chỉ reuse/stop đúng resources đã xác minh; không rm/reset, không ghi đè container trùng tên. Các container cũ không có label ownership phải được đối chiếu riêng; script từ chối tự nhận quyền sở hữu. Stop giữ private environment để resume. Seed chỉ thêm fixtures thiếu với target guard, không xóa/ghi đè audit, session hoặc mapping hiện có.
+
+AC-10 dùng pg_dump/pg_restore thật sang database synthetic mới duy nhất trong cùng project container, so hash nội dung bảy bảng và constraints; không in dump/token ra log, không drop target hoặc xóa schema có trước. Bản sao được giữ lại để kiểm tra; việc dọn dữ liệu cần chỉ dẫn riêng.
