@@ -10,6 +10,11 @@
 | D-06 | Stack scaffold Sprint 0 và ranh giới SSO | ACCEPTED cho Sprint 0 — ADR-001 v1.0; SSO/auth hoãn sang D-08 | Scaffold được mở khóa bởi TASK-0001 READY; chưa duyệt stack production |
 | D-07 | Điểm tổng hợp KPI chi nhánh | Không tự tạo trung bình | Trước executive composite |
 | D-08 | SSO/auth doanh nghiệp: IdP, giao thức, session/token/logout | DEFERRED khỏi Sprint 0, chưa chọn giải pháp | Phải duyệt trước auth/Sprint 1; không chặn scaffold không auth |
+| D-09 | Database engine/ORM và môi trường dev/test cho Sprint 1 | OPEN; PostgreSQL local hoặc test do tổ chức cấp là phương án, chưa duyệt | Trước code persistence/schema/migration; không thay D-05 cho hosting/dữ liệu thật |
+
+## Chuẩn bị Sprint 1 — 2026-11-13
+
+Chủ dự án chọn “Chuẩn bị đặc tả Sprint 1 và phương án cần duyệt; chưa code đăng nhập/database”. [TASK-0002](../tasks/TASK-0002.md) READY chỉ cho tài liệu; [Sprint 1 draft](specs/SPRINT-1.md) chứa phương án D-08/D-09 và câu hỏi xin duyệt. [ADR-002](adr/ADR-002-authorization.md) vẫn PROPOSED cho role/action/data scope. Việc chuẩn bị đặc tả không đóng D-08/D-09, không duyệt database, auth hoặc Sprint 1 implementation.
 
 ## D-06 — quyết định ngày 2026-11-11, version 1.0
 

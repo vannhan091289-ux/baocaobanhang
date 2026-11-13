@@ -16,4 +16,6 @@ Organization & Authorization; KPI definitions/Targets/Actuals; WeeklyPlans/Activ
 - Không ấn định đường dẫn code trước khi scaffold/stack được chốt; mỗi TASK sau đó phải xác định file thật và tác động schema/API.
 
 ## Trạng thái ADR
-ADR-001: stack/cấu trúc Sprint 0 `ACCEPTED`, không duyệt kiến trúc production. ADR-002: RBAC/data scope; ADR-003: KPI facts/reconciliation; ADR-004: event/notification channels; ADR-005: customer reference/data restrictions vẫn `PROPOSED`. Modular monolith/PostgreSQL là định hướng cho giai đoạn nghiệp vụ, chưa cho phép triển khai ở Sprint 0.
+ADR-001: stack/cấu trúc Sprint 0 `ACCEPTED`, không duyệt kiến trúc production. [ADR-002](adr/ADR-002-authorization.md): RBAC/data scope; ADR-003: KPI facts/reconciliation; ADR-004: event/notification channels; ADR-005: customer reference/data restrictions vẫn `PROPOSED`. Modular monolith/PostgreSQL là định hướng cho giai đoạn nghiệp vụ, chưa cho phép triển khai ở Sprint 0.
+
+[TASK-0002](../tasks/TASK-0002.md) chuẩn bị [đặc tả Sprint 1](specs/SPRINT-1.md) và phương án phê duyệt; chưa code auth/database. D-08/D-09 và ADR-002 là gate trước các task implementation tương ứng.
