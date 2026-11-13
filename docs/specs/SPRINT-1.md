@@ -1,18 +1,19 @@
-# Sprint 1 — Đặc tả dự thảo và phương án cần duyệt
+# Sprint 1 — S1-A DEVTEST đã duyệt; S1-B/C dự thảo
 
-Status: DRAFT — chưa duyệt implementation
-Version: 0.4
+Status: DRAFT — toàn Sprint 1 chưa được mở khóa
+Approved scope: S1-A DEVTEST qua TASK-0003 READY sau merge PR #5; execution preflight bắt buộc
+Version: 0.5
 Prepared: 2026-11-13 (Asia/Ho_Chi_Minh)
 Baseline: main b04b69d1c63ae9f0a9aa525944c15056efe76ef0; TASK-0002 ACCEPTED
 Preparation task: [TASK-0002](../../tasks/TASK-0002.md), chỉ `DOCUMENTATION_ONLY`; nghiệm thu tài liệu không cho phép code Sprint 1
 
-Proposal package: [D-08/D-09/ADR-002](../decisions/SPRINT-1-APPROVAL.md), chưa duyệt. [TASK-0003](../../tasks/TASK-0003.md) đề xuất chỉ S1-A; chưa READY, chưa code/deploy.
+Approval package: [D-08/D-09/ADR-002](../decisions/SPRINT-1-APPROVAL.md), ACCEPTED cho DEVTEST 2026-11-13; [image manifest](../decisions/SPRINT-1-IMAGES.md) LOCKED. [TASK-0003](../../tasks/TASK-0003.md) READY chỉ S1-A sau merge; máy Antigravity thiếu runtime phải BLOCKED trước code/install/pull/migrate. Lượt cập nhật này chưa code/deploy.
 
 ## 1. Mục tiêu, ranh giới và phân tách Facts / Proposals / Unknowns
 
 ### 1.1 Mục tiêu đề xuất cho Sprint 1 (PROPOSAL)
 
-Một người dùng được xác thực qua IdP đã được chủ dự án/IT phê duyệt theo phạm vi; gói DEVTEST hiện đề xuất Keycloak synthetic, không nghiệm thu SSO doanh nghiệp, được ánh xạ (mapping) tới một hồ sơ nhân sự và phòng ban hợp lệ trong chi nhánh, chỉ được phép thực hiện đúng hành động và chỉ nhìn thấy dữ liệu thuộc phạm vi (scope) được cấp bởi backend. Ưu tiên triển khai theo các phần nhỏ (slices) có thể kiểm thử và nghiệm thu độc lập, không dựng nhiều màn hình trước khi chốt quyền.
+Một người dùng được xác thực qua IdP đã được chủ dự án/IT phê duyệt theo phạm vi; gói DEVTEST đã duyệt Keycloak synthetic, không nghiệm thu SSO doanh nghiệp, được ánh xạ (mapping) tới một hồ sơ nhân sự và phòng ban hợp lệ trong chi nhánh, chỉ được phép thực hiện đúng hành động và chỉ nhìn thấy dữ liệu thuộc phạm vi (scope) được cấp bởi backend. Ưu tiên triển khai theo các phần nhỏ (slices) có thể kiểm thử và nghiệm thu độc lập, không dựng nhiều màn hình trước khi chốt quyền.
 
 ### 1.2 Phân tách trạng thái thông tin
 
@@ -23,11 +24,11 @@ Một người dùng được xác thực qua IdP đã được chủ dự án/I
   - Chính sách nội bộ của tổ chức về IdP, tiêu chuẩn phiên đăng nhập, phân loại dữ liệu và hạ tầng lưu trữ **chưa được cung cấp** trong repository.
 - **Proposals (Đề xuất trong tài liệu này — `DRAFT` / `PROPOSED`):**
   - Mô hình thực thể tối thiểu (`Department`, `Staff`, `IdentityLink`, `RoleAssignment`, `AuditEvent`), luồng nghiệp vụ nền tảng (`S1-A`, `S1-B`, `S1-C`), hai phương án cho `D-08` và hai phương án cho `D-09`.
-  - Quy tắc kiểm tra quyền mặc định từ chối (`default-deny`) và ma trận quyền chi tiết được đặt duy nhất tại [ADR-002](../adr/ADR-002-authorization.md) (`PROPOSED`).
-- **Unknowns / Open Decisions (`OPEN` — chờ chủ dự án/IT chốt trước khi code):**
-  - `D-08` (`OPEN` / `DEFERRED` từ Sprint 0): loại IdP, giao thức xác thực, thời hạn phiên, cơ chế thu hồi phiên (revocation window) và chính sách đăng xuất.
-  - `D-09` (`OPEN`): môi trường PostgreSQL dev/test, chiến lược truy cập dữ liệu (data layer/ORM) và quy trình duyệt schema/migration.
-  - Các câu hỏi chính sách trong `ADR-002` (`PROPOSED`): thẩm quyền gán/duyệt role, cơ chế khởi tạo quản trị viên đầu tiên (bootstrap admin), quy tắc xử lý người dùng có nhiều vai trò đồng thời, hiệu lực thời gian khi chuyển phòng và mã phản hồi HTTP khi từ chối truy cập.
+  - Quy tắc kiểm tra quyền mặc định từ chối (`default-deny`) và ma trận quyền chi tiết được đặt duy nhất tại [ADR-002](../adr/ADR-002-authorization.md) (`ACCEPTED`, Scope: DEVTEST).
+- **Approved decisions / remaining gates:**
+  - D-08 B, D-09 A và ADR-002 v0.3 được duyệt cho DEVTEST/S1-A theo approval package; session/role/error/schema/rollback dùng đúng nguồn chuẩn đã liên kết.
+  - D-05/D-10 vẫn OPEN cho real data/hosting/IdP doanh nghiệp/MFA/global logout; không suy ra từ DEVTEST.
+  - Local Antigravity thiếu container runtime theo báo cáo được cung cấp: phải qua execution preflight, không tự cài global. S1-B/C chưa có task READY, vẫn dự thảo.
 
 ### 1.3 Ngoài phạm vi Sprint 1 (Out of Scope)
 
@@ -39,7 +40,9 @@ Một người dùng được xác thực qua IdP đã được chủ dự án/I
 
 ---
 
-## 2. Actors và mô hình dữ liệu tối thiểu đề xuất (PROPOSAL — chưa phải schema)
+## 2. Actors và mô hình khái niệm tối thiểu
+
+Mục này giữ mô hình khái niệm của toàn Sprint 1; schema bảy bảng S1-A dùng duy nhất approval package mục 3. Không tạo thêm bảng/trường ngoài task từ mô hình tổng quan.
 
 ### 2.1 Các tác nhân (Actors)
 
@@ -79,11 +82,11 @@ Các khái niệm dưới đây chỉ nhằm làm rõ ranh giới nghiệp vụ 
 
 ---
 
-## 4. Phân tích phương án cho các quyết định mở `D-08` và `D-09` (OPEN)
+## 4. Phân tích phương án đã dùng để duyệt D-08 B / D-09 A (DEVTEST)
 
 ### 4.1 Quyết định `D-08` — Xác thực doanh nghiệp (SSO / IdP & Session Policy)
 
-Trạng thái: **OPEN** (hoãn từ Sprint 0 theo [DECISIONS.md](../DECISIONS.md); chưa phê duyệt lựa chọn; đề xuất cụ thể ở gói xin duyệt).
+Trạng thái: **ACCEPTED, Scope: DEVTEST** — D-08 B theo [approval package](../decisions/SPRINT-1-APPROVAL.md); D-10 giữ nghĩa vụ enterprise SSO. Bảng A/B bên dưới lưu phân tích, không cho phép tự đổi lựa chọn.
 
 | Tiêu chí so sánh | Phương án A — Tích hợp trực tiếp IdP doanh nghiệp hiện có (Non-prod/Test Tenant của tổ chức) | Phương án B — Môi trường IdP/OIDC chuẩn hóa tách biệt cho dev/test (chỉ dữ liệu synthetic) |
 |---|---|---|
@@ -97,13 +100,13 @@ Trạng thái: **OPEN** (hoãn từ Sprint 0 theo [DECISIONS.md](../DECISIONS.md
   - Chọn **Phương án A** nếu bộ phận IT có sẵn non-prod tenant của IdP doanh nghiệp và cho phép kết nối kiểm thử.
   - Chọn **Phương án B** nếu chưa thể cấp kết nối IdP doanh nghiệp ngay nhưng chủ dự án muốn kiểm chứng toàn bộ luồng xác thực, gắn nhân sự và phân quyền backend bằng dữ liệu synthetic theo chuẩn OIDC.
   - **Ranh giới bảo mật bắt buộc:** Tuyệt đối không tự tạo cơ chế đăng nhập giả bằng biến môi trường, mật khẩu hardcode hay trang chọn role tạm thời không qua xác thực để thay thế `D-08`.
-- **Tham chiếu chuẩn và profile bảo vệ đề xuất (chưa thay phê duyệt D-08):**
-  - Đề xuất dự án dùng **Authorization Code Flow + PKCE (`S256`)** cho mọi client được chọn, exact-match `redirect_uri` và chống hạ cấp PKCE. **RFC 9700** mục 2.1.1 bắt buộc PKCE với public clients và khuyến nghị với confidential clients; yêu cầu cho mọi client ở đây là profile dự án đề xuất nghiêm hơn, cần D-08 xác nhận, không phải trích dẫn rằng RFC bắt buộc như nhau với mọi client. [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html#section-2.1.1), đối chiếu ngày `2026-11-13`.
+- **Tham chiếu chuẩn và lý do chọn profile D-08 đã duyệt:**
+  - Đề xuất dự án dùng **Authorization Code Flow + PKCE (`S256`)** cho mọi client được chọn, exact-match `redirect_uri` và chống hạ cấp PKCE. **RFC 9700** mục 2.1.1 bắt buộc PKCE với public clients và khuyến nghị với confidential clients; yêu cầu cho mọi client ở đây là profile dự án nghiêm hơn đã được duyệt cho DEVTEST, không phải trích dẫn rằng RFC bắt buộc như nhau với mọi client. [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html#section-2.1.1), đối chiếu ngày `2026-11-13`.
   - Validation ID Token dựa trên thuật toán/khóa và profile IdP được duyệt; JWKS áp dụng cho khóa bất đối xứng tương ứng, không mặc định mọi provider dùng cùng cơ chế ký. Kiểm tra `iss`, `aud`, `exp`, `nonce` nếu đã gửi; `azp` theo extension/profile và khoảng chấp nhận `iat` phải được xác định trước code. Không tự chọn library/provider hay dùng kiểm tra email thay identity validation. [OIDC Core 1.0 — 3.1.3.7](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation), đối chiếu ngày `2026-11-13`.
 
 ### 4.2 Quyết định `D-09` — Cơ sở dữ liệu & Data Layer cho môi trường dev/test
 
-Trạng thái: **OPEN** (PostgreSQL mới là định hướng trong [ARCHITECTURE.md](../ARCHITECTURE.md), chưa phê duyệt triển khai).
+Trạng thái: **ACCEPTED, Scope: DEVTEST** — D-09 A theo [approval package](../decisions/SPRINT-1-APPROVAL.md); schema/rollback chỉ trong TASK-0003. Bảng A/B dưới lưu phân tích, không cho phép tự đổi lựa chọn.
 
 | Tiêu chí so sánh | Phương án A — PostgreSQL khởi chạy cục bộ & trên CI runner (Local / Ephemeral Container, chỉ synthetic) | Phương án B — PostgreSQL dev/test tập trung do tổ chức cung cấp |
 |---|---|---|
@@ -115,7 +118,7 @@ Trạng thái: **OPEN** (PostgreSQL mới là định hướng trong [ARCHITECTU
 
 - **Đề xuất có điều kiện của người soạn:**
   - Ưu tiên **Phương án A** cho Sprint 1 (với dữ liệu 100% synthetic) để đảm bảo khả năng kiểm thử tự động, độc lập và tái lập trên CI mà không cần cấu hình bí mật hạ tầng ngoài. Chuyển sang hoặc bổ sung **Phương án B** khi tổ chức cấp môi trường staging/UAT.
-  - Về tầng truy cập dữ liệu (data layer): chờ chủ dự án duyệt giữa (1) driver PostgreSQL kèm câu lệnh SQL tường minh/kiểm tra kiểu và (2) ORM/query builder có quản lý migration chặt chẽ; chỉ cài đặt package sau khi quyết định được chốt và có task implementation `READY`.
+  - Về data layer: D-09 A đã chọn pg + SQL tham số hóa, node-pg-migrate, chưa ORM; dùng pins trong approval package. Chỉ cài package sau READY và execution preflight PASS; không tự đổi sang ORM/query builder.
 - **Lưu ý bảo mật từ nguồn chính thức về Row-Level Security (RLS):**
   - Theo tài liệu chính thức **PostgreSQL Row Security Policies** (mục 5.9 của PostgreSQL 18 — nguồn: https://www.postgresql.org/docs/18/ddl-rowsecurity.html, đối chiếu ngày `2026-11-13`), các vai trò `SUPERUSER`, vai trò có thuộc tính `BYPASSRLS` và mặc định cả **chủ sở hữu bảng (`table owner`)** đều bỏ qua RLS (trừ khi bật `FORCE ROW LEVEL SECURITY`, nhưng `SUPERUSER` và `BYPASSRLS` vẫn luôn vượt qua).
   - Do đó, kiểm tra quyền ở **backend ứng dụng là bắt buộc**; nếu sử dụng RLS trong tương lai thì chỉ đóng vai trò lớp phòng thủ bổ sung (defense-in-depth) và tài khoản kết nối runtime của ứng dụng tuyệt đối không được là `superuser`, không có `BYPASSRLS` và nên tách biệt với tài khoản chạy migration sở hữu bảng.
@@ -125,7 +128,7 @@ Trạng thái: **OPEN** (PostgreSQL mới là định hướng trong [ARCHITECTU
 
 ## 5. Phân nhỏ lộ trình Sprint 1 theo phụ thuộc (Proposed Vertical Slices)
 
-Các phần việc dưới đây là đề xuất chia nhỏ để giảm rủi ro; **chưa phải là các task `READY` để viết code**:
+Các slices dưới giữ trình tự giảm rủi ro: S1-A được duyệt riêng qua TASK-0003 READY sau merge PR #5 và preflight PASS; S1-B/C vẫn cần task/approval riêng.
 
 **Baseline bảo mật không được trì hoãn:** Slice đầu tạo endpoint nội bộ phải có xác thực phù hợp, default-deny, kiểm tra role/action/scope và audit tối thiểu ngay trong slice đó. Mapping `IdentityLink`/`Staff`/`RoleAssignment` tối thiểu phải có từ S1-A theo D-09/schema đã duyệt, không chờ CRUD ở S1-B hoặc giả lập danh tính để vượt gate. S1-C chỉ hoàn thiện độ phủ/kiểm soát; không phải thời điểm bắt đầu bảo vệ các endpoint đã tồn tại.
 
@@ -167,17 +170,8 @@ Các phần việc dưới đây là đề xuất chia nhỏ để giảm rủi 
 
 ---
 
-## 7. Danh sách câu hỏi ngắn gọn trình Chủ dự án / IT phê duyệt
+## 7. Quyết định đã duyệt và bước tiếp theo
 
-Gói lựa chọn cụ thể hiện nằm ở [SPRINT-1-APPROVAL](../decisions/SPRINT-1-APPROVAL.md); câu hỏi dưới là các trục lựa chọn, không thay thế approval. TASK-0003 chỉ thực hiện S1-A sau READY; S1-B/C cần task sau. Không gửi mật khẩu, khóa bí mật hay dữ liệu thật.
+Chủ dự án duyệt D-08 B / D-09 A / ADR-002 v0.3 / S1-A vào 2026-11-13; nguyên văn/reference tại [approval package](../decisions/SPRINT-1-APPROVAL.md) mục 6. TASK-0003 là slice thực thi đầu tiên sau READY trên main và preflight runtime PASS; không Org CRUD, dữ liệu thật, enterprise SSO hoặc deploy. Trên máy chưa có runtime được phép, Antigravity chỉ báo BLOCKED; không tự cài global/đổi dịch vụ/mock integration.
 
-1. **Chốt `D-08` (Xác thực & Phiên):**
-   - Chọn **Phương án A** (tích hợp non-prod tenant của IdP doanh nghiệp hiện có) hay **Phương án B** (dùng OIDC test provider chuẩn hóa với dữ liệu synthetic cho dev/test)?
-   - Quy định về thời hạn phiên đăng nhập (idle/absolute timeout) và thời gian tối đa để thu hồi phiên khi nhân sự nghỉ việc/đổi quyền là bao lâu?
-2. **Chốt `D-09` (Cơ sở dữ liệu & Data Layer cho dev/test):**
-   - Chọn **Phương án A** (PostgreSQL local & ephemeral CI container, chỉ synthetic) hay **Phương án B** (PostgreSQL test tập trung do tổ chức cấp)?
-   - Phiên bản PostgreSQL và công cụ truy cập dữ liệu/migration nào được phê duyệt đưa vào dự án?
-3. **Chốt `ADR-002` (Ma trận phân quyền & Quản trị tổ chức):**
-   - Ai có thẩm quyền gán/phê duyệt `RoleAssignment` (Ban Giám đốc, Admin cấu hình cần phê duyệt kép, hay quy trình khác) và tài khoản quản trị đầu tiên (`bootstrap admin`) được khởi tạo theo quy trình nào?
-   - Một nhân sự có được giữ nhiều vai trò đồng thời không (nếu có, áp dụng quy tắc chọn vai trò đang hoạt động hay hợp nhất quyền trong phạm vi nào), và khi chuyển phòng thì quyền ở phòng cũ chấm dứt ngay lập tức hay theo ngày hiệu lực?
-   - Mã phản hồi HTTP khi truy cập tài nguyên ngoài phạm vi phòng ban sẽ dùng `403 Forbidden` thống nhất hay `404 Not Found` (để ẩn sự tồn tại của bản ghi ngoài scope)?
+S1-B/C vẫn cần task/approval riêng sau nghiệm thu slice trước. Không đóng D-01..D-05/D-07/D-10. Toàn bộ AC implementation TASK-0003 hiện NOT RUN; metadata/CI baseline không thay bằng chứng OIDC/database thật.

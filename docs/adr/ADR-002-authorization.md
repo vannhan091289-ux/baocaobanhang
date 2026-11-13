@@ -1,18 +1,19 @@
-# ADR-002 — Authorization và data scope đề xuất cho Sprint 1
+# ADR-002 — Authorization và data scope cho Sprint 1 (DEVTEST)
 
-Status: PROPOSED — chưa phê duyệt implementation
+Status: ACCEPTED
+Scope: DEVTEST — chỉ S1-A theo TASK-0003; quyền S1-B/C cần task riêng
 Version: 0.3
 Prepared: 2026-11-13 (Asia/Ho_Chi_Minh)
-Approved by: — (chờ Chủ dự án phê duyệt)
+Approved by: Chủ dự án — chỉ dẫn trực tiếp trong chat điều phối, 2026-11-13; bản ghi nguyên văn tại docs/decisions/SPRINT-1-APPROVAL.md mục 6, PR #5
 Applies to: Đặc tả Sprint 1 ([docs/specs/SPRINT-1.md](../specs/SPRINT-1.md)); không thay thế [ADR-001](ADR-001-stack.md) đã duyệt cho Sprint 0
 
 ## 1. Bối cảnh, nguồn chuẩn và giới hạn phạm vi
 
 - Đề xuất này cụ thể hóa nguyên tắc kiểm soát truy cập trong [Product](../PRODUCT.md), [Security](../SECURITY.md), [Architecture](../ARCHITECTURE.md) và [Decisions](../DECISIONS.md).
 - Kế thừa [TASK-0002](../../tasks/TASK-0002.md) (`DOCUMENTATION_ONLY`), tài liệu này là nguồn chuẩn duy nhất cho mô hình phân quyền, phạm vi dữ liệu (`data scope`) và ma trận quyết định quyền đề xuất của Sprint 1.
-- Các quyết định `D-08` (IdP/SSO/session) và `D-09` (Database/ORM dev/test) hiện vẫn `OPEN`. Tài liệu này ở trạng thái `PROPOSED`, **không** cấp quyền viết code xác thực/RBAC/database và **không** cấp quyền truy cập dữ liệu khách hàng thật (`D-05`).
+- `D-08` B và `D-09` A đã `ACCEPTED` cho DEVTEST theo [approval record](../decisions/SPRINT-1-APPROVAL.md). ADR-002 v0.3 được chủ dự án duyệt; chỉ TASK-0003 S1-A được READY sau merge tài liệu và phải qua execution preflight. Không cấp quyền dữ liệu thật (`D-05`) hoặc thực hiện code/deploy trong lượt kích hoạt này.
 
-## 2. Nguyên tắc và Contract phân quyền đề xuất (PROPOSED)
+## 2. Nguyên tắc và Contract phân quyền (ACCEPTED — DEVTEST)
 
 1. **Thực thi bắt buộc tại Backend (`Backend-first Enforcement`):**
    - Mọi quyết định cho phép hay từ chối (`ALLOW` / `DENY`) phải được đánh giá tại backend dựa trên định danh phiên đã xác thực từ server, liên kết nhân sự (`IdentityLink` → `Staff`) và bản ghi phân quyền (`RoleAssignment`) đang có hiệu lực.
@@ -30,24 +31,24 @@ Applies to: Đặc tả Sprint 1 ([docs/specs/SPRINT-1.md](../specs/SPRINT-1.md)
 4. **Tách biệt quyền Admin cấu hình và chống tự nâng quyền (`No Self-Escalation & No Implicit Customer Access`):**
    - `CONFIG_ADMIN` chỉ có quyền quản trị cấu hình tổ chức/danh mục theo các hành động được phê duyệt và kiểm toán.
    - `CONFIG_ADMIN` **không** mặc nhiên có quyền xem dữ liệu khách hàng (`Customer` / `Lead` / `Opportunity` / `KPI`) và **cấm** tự gán, tự sửa hoặc tự phê duyệt quyền (`RoleAssignment`) cho chính mình.
-5. **Các lựa chọn đang xin duyệt (chưa có hiệu lực):**
+5. **Các lựa chọn đã được duyệt cho DEVTEST:**
    - Chính xác một `RoleAssignment` hiệu lực trên mỗi Staff; không union/chọn tùy tiện. Nhiều assignment đồng thời phải DENY; cho phép lịch sử tuần tự. Interval UTC `[effective_from,effective_to)`, `effective_to=null` nghĩa chưa ấn định hết hạn.
    - Role/scope hợp lệ: EXECUTIVE và CONFIG_ADMIN → BRANCH; DEPARTMENT_MANAGER → DEPARTMENT có scope_department_id bằng phòng ACTIVE của Staff; STAFF → SELF. Mọi tổ hợp khác DENY.
    - Session/profile và revocation window nằm duy nhất ở [gói phê duyệt](../decisions/SPRINT-1-APPROVAL.md), mục 2; không cache ALLOW. Thu hồi/inactive/chuyển phòng được kiểm tra lại từ request kế tiếp sau commit. Session ràng buộc assignment ban đầu; role mới không tái dùng session cũ.
 
-## 3. Ma trận phân quyền và phạm vi dữ liệu đề xuất (PROPOSED — cần Chủ dự án duyệt)
+## 3. Ma trận phân quyền và phạm vi dữ liệu được duyệt (Scope: DEVTEST)
 
 | Actor (Vai trò) | Đọc danh mục Phòng ban (`org.department.read`) | Đọc hồ sơ Nhân sự tối thiểu (`org.staff.read`) | Tạo / Cập nhật Phòng ban & Nhân sự (`org.department.write`, `org.staff.write`) | Xem phân quyền (`authz.role.read`) | Gán / Thu hồi phân quyền (`authz.role.assign`) | Truy cập dữ liệu Khách hàng / KPI / Lead (`customer.*`, `kpi.*`) |
 |---|---|---|---|---|---|---|
-| **Ban Giám đốc (`EXECUTIVE`)** | `ALLOW` — Scope: `BRANCH` | `ALLOW` — Scope: `BRANCH` (chỉ các trường quản trị được duyệt) | `DENY` (Sprint 1 chưa đề xuất Ban Giám đốc trực tiếp sửa danh mục) | `ALLOW` — Scope: `BRANCH` | `PROPOSED`: chỉ phê duyệt đề nghị của CONFIG_ADMIN cho người khác; cấm tự duyệt; chưa có endpoint trong TASK-0003 | **Ngoài phạm vi Sprint 1** (chưa mở API/grant; mặc định `DENY`) |
+| **Ban Giám đốc (`EXECUTIVE`)** | `ALLOW` — Scope: `BRANCH` | `ALLOW` — Scope: `BRANCH` (chỉ các trường quản trị được duyệt) | `DENY` (Sprint 1 chưa đề xuất Ban Giám đốc trực tiếp sửa danh mục) | `ALLOW` — Scope: `BRANCH` | `ACCEPTED DEVTEST`: chỉ phê duyệt đề nghị của CONFIG_ADMIN cho người khác; cấm tự duyệt; chưa có endpoint trong TASK-0003 | **Ngoài phạm vi Sprint 1** (chưa mở API/grant; mặc định `DENY`) |
 | **Quản lý phòng (`DEPARTMENT_MANAGER`)** | `ALLOW` — Scope: `BRANCH` (danh mục phòng cơ bản) | `ALLOW` — Scope: `DEPARTMENT` (chỉ nhân sự thuộc phòng được giao; `DENY` phòng khác) | `DENY` | `ALLOW` — Scope: `DEPARTMENT` (chỉ xem vai trò nhân sự trong phòng) | `DENY` | **Ngoài phạm vi Sprint 1** (mặc định `DENY`) |
 | **Nhân viên (`STAFF` — KHCN/KHDN/DVKH)** | `ALLOW` — Scope: `BRANCH` (danh mục tên/mã phòng tối thiểu) | `ALLOW` — Scope: `SELF` (chỉ bản thân; `DENY` hồ sơ chi tiết nhân sự khác) | `DENY` | `ALLOW` — Scope: `SELF` | `DENY` | **Ngoài phạm vi Sprint 1** (mặc định `DENY`) |
-| **Admin cấu hình (`CONFIG_ADMIN`)** | `ALLOW` — Scope: `BRANCH` | `ALLOW` — Scope: `BRANCH` (chỉ các trường cấu hình; không gồm dữ liệu nghiệp vụ/KH) | `ALLOW` (Đề xuất) — Scope: `BRANCH`, bắt buộc ghi `AuditEvent` | `ALLOW` — Scope: `BRANCH` | `PROPOSED`: đề nghị thay đổi cho người khác, cần EXECUTIVE duyệt; cấm tự đề nghị/duyệt; chưa có endpoint trong TASK-0003 | **`DENY` tuyệt đối** (Admin không mặc nhiên có quyền xem dữ liệu KH/nghiệp vụ) |
+| **Admin cấu hình (`CONFIG_ADMIN`)** | `ALLOW` — Scope: `BRANCH` | `ALLOW` — Scope: `BRANCH` (chỉ các trường cấu hình; không gồm dữ liệu nghiệp vụ/KH) | `ALLOW` (Đề xuất) — Scope: `BRANCH`, bắt buộc ghi `AuditEvent` | `ALLOW` — Scope: `BRANCH` | `ACCEPTED DEVTEST`: đề nghị thay đổi cho người khác, cần EXECUTIVE duyệt; cấm tự đề nghị/duyệt; chưa có endpoint trong TASK-0003 | **`DENY` tuyệt đối** (Admin không mặc nhiên có quyền xem dữ liệu KH/nghiệp vụ) |
 | **Chưa xác thực / Chưa map / Ngừng hoạt động (`ANONYMOUS` / `UNMAPPED` / `INACTIVE`)** | `DENY` | `DENY` | `DENY` | `DENY` | `DENY` | `DENY` |
 
-> **Lưu ý:** Toàn bộ ma trận là đề xuất (`PROPOSED`). TASK-0003 chỉ thực thi self-context/workspace và policy tests; các quyền đọc/ghi danh mục hoặc workflow gán quyền không tự mở API ở S1-A. Chỉ dùng synthetic.
+> **Lưu ý:** Ma trận được duyệt cho DEVTEST; việc duyệt policy không tự mở endpoint ngoài task. TASK-0003 chỉ thực thi self-context/workspace và policy tests; các quyền đọc/ghi danh mục hoặc workflow gán quyền không tự mở API ở S1-A. Chỉ dùng synthetic.
 
-### 3.1 Field allowlist đề xuất
+### 3.1 Field allowlist được duyệt
 
 - Department read: ID, code, name, status; không metadata/secret IdP.
 - Staff read trong scope: ID, staff_code, display_name, department_id, status và role_code hiệu lực; STAFF chỉ thấy chính mình. Không điện thoại, email thật, claims, credentials, token hoặc session identifiers.
@@ -56,7 +57,7 @@ Applies to: Đặc tả Sprint 1 ([docs/specs/SPRINT-1.md](../specs/SPRINT-1.md)
 
 ## 4. Các trường hợp từ chối bắt buộc kiểm thử (Mandatory Negative & Deny Cases)
 
-Khi chuyển sang giai đoạn triển khai (sau khi ADR này được `ACCEPTED`), bộ kiểm thử tự động tại backend bắt buộc phải chứng minh hệ thống từ chối (`DENY`) các kịch bản sau:
+Khi chuyển sang giai đoạn triển khai (với ADR này `ACCEPTED` cho DEVTEST), bộ kiểm thử tự động tại backend bắt buộc phải chứng minh hệ thống từ chối (`DENY`) các kịch bản sau:
 
 1. **Thiếu hoặc sai định danh (`Identity & Session Denial`):**
    - Gọi bất kỳ endpoint nội bộ nào khi không có phiên, phiên hết hạn (`expired`), phiên đã thu hồi (`revoked`) hoặc token không hợp lệ.
@@ -82,16 +83,16 @@ Khi chuyển sang giai đoạn triển khai (sau khi ADR này được `ACCEPTED
   - Không bao giờ ghi mật khẩu, session token, `id_token`, `access_token`, `refresh_token`, khóa bí mật hoặc nguyên văn payload claims chưa lọc vào bảng audit, console log hay CI artifacts.
 - **Ngữ nghĩa lỗi chống rò rỉ dữ liệu (`Error Semantics`):**
   - Không trả về thông báo lỗi chứa chi tiết dữ liệu của bản ghi ngoài phạm vi (ví dụ tên nhân sự hoặc phòng ban mà người gọi không có quyền xem).
-  - Contract đề xuất: `401` khi chưa xác thực/phiên không hợp lệ; `403` khi session hợp lệ nhưng action bị cấm; lookup theo ID không tồn tại hoặc ngoài scope trả cùng `404`/error envelope, không để lộ tồn tại. Callback login bị từ chối chỉ trả mã lỗi an toàn, không cấp session. Failure semantics của audit nằm ở [gói phê duyệt](../decisions/SPRINT-1-APPROVAL.md), mục 3.
+  - Contract được duyệt: `401` khi chưa xác thực/phiên không hợp lệ; `403` khi session hợp lệ nhưng action bị cấm; lookup theo ID không tồn tại hoặc ngoài scope trả cùng `404`/error envelope, không để lộ tồn tại. Callback login bị từ chối chỉ trả mã lỗi an toàn, không cấp session. Failure semantics của audit nằm ở [gói phê duyệt](../decisions/SPRINT-1-APPROVAL.md), mục 3.
 
-## 6. Các quyết định cần Chủ dự án phê duyệt và Gate trước khi viết code
+## 6. Quyết định đã duyệt và Gate trước khi viết code
 
-### 6.1 Các lựa chọn cụ thể xin duyệt để chuyển `PROPOSED` sang `ACCEPTED` (Scope: DEVTEST)
+### 6.1 Bản ghi duyệt ADR-002 v0.3 (Scope: DEVTEST)
 
-1. Duyệt ma trận/field allowlist mục 3 và một role hiệu lực mục 2, chỉ synthetic; đây chưa phải xác nhận chính sách ngân hàng.
-2. Maker-checker đề xuất: CONFIG_ADMIN đề nghị thay đổi quyền của người khác, EXECUTIVE phê duyệt; actor đề nghị, actor phê duyệt và Staff đích phải khác nhau. Không workflow/API gán quyền trong TASK-0003. Bootstrap DEVTEST bằng seed offline tạo hai identity synthetic riêng EXECUTIVE/CONFIG_ADMIN; không auto-admin user đầu tiên hoặc endpoint bootstrap.
+1. Đã duyệt ma trận/field allowlist mục 3 và một role hiệu lực mục 2, chỉ synthetic; đây chưa phải xác nhận chính sách ngân hàng.
+2. Maker-checker được duyệt: CONFIG_ADMIN đề nghị thay đổi quyền của người khác, EXECUTIVE phê duyệt; actor đề nghị, actor phê duyệt và Staff đích phải khác nhau. Không workflow/API gán quyền trong TASK-0003. Bootstrap DEVTEST bằng seed offline tạo hai identity synthetic riêng EXECUTIVE/CONFIG_ADMIN; không auto-admin user đầu tiên hoặc endpoint bootstrap.
 3. Chuyển phòng kết thúc assignment cũ và revoke mọi app session; assignment mới chỉ hiệu lực sau duyệt, không carry-over quyền cũ. TASK-0003 kiểm thử bằng fixture/seed, chưa có Org CRUD.
-4. Duyệt revocation/session profile và HTTP contract đã đề xuất, cùng [gói D-08/D-09](../decisions/SPRINT-1-APPROVAL.md). Owner/date/version/approval reference vẫn trống cho đến khi có phê duyệt thực tế.
+4. Đã duyệt revocation/session profile và HTTP contract cùng [gói D-08/D-09](../decisions/SPRINT-1-APPROVAL.md), mục 6 ghi nguyên văn approval/owner/date/version/reference. Chính sách v0.3 không đổi trong commit kích hoạt; chỉ ghi nhận trạng thái và gate môi trường.
 
 ### 6.2 Điều kiện mở khóa triển khai (Gates before Implementation)
 
@@ -104,4 +105,4 @@ Khi chuyển sang giai đoạn triển khai (sau khi ADR này được `ACCEPTED
 ## 7. Rủi ro và Kế hoạch hoàn tác (Risks & Rollback)
 
 - **Rủi ro chính nếu thiết kế không chặt:** tự nâng quyền (`self-escalation`), quyền cũ vẫn hoạt động sau khi nhân sự chuyển phòng hoặc nghỉ việc, rò rỉ danh sách nhân sự phòng khác qua API tìm kiếm/lọc, hoặc ghi lộ token vào audit log.
-- **Hoàn tác ở giai đoạn đặc tả hiện tại:** Mọi nội dung trong tệp này là đề xuất tài liệu (`PROPOSED`); nếu cần điều chỉnh hoặc hủy bỏ, thực hiện qua commit/revert trên nhánh tài liệu mà không ảnh hưởng tới mã nguồn hay cơ sở dữ liệu.
+- **Hoàn tác gói tài liệu:** Revert scoped commit tài liệu qua review, không tác động code/DB. Chưa có implementation. Khi triển khai cần rollback/restore giữ guards và audit như approval package; không tự down/drop/reset dữ liệu.
