@@ -1208,9 +1208,24 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
         "--no-acl",
         "--schema=public",
       ]);
+      // template0 already provides public. Skip only its CREATE SCHEMA TOC entry,
+      // retaining every function/table/data/constraint and never dropping the existing schema.
+      const toc = tool(["pg_restore", "--list"], dump).toString("utf8");
+      const schemaEntry = /^\d+;\s+\d+\s+\d+\s+SCHEMA - public(?:\s|$)/;
+      const entries = toc.split("\n");
+      expect(entries.filter((line) => schemaEntry.test(line)).length).toBe(1);
+      const restoreList = entries
+        .filter((line) => !schemaEntry.test(line))
+        .join("\n");
+      const listPath = `/tmp/${backupDatabase}.list`;
+      tool(
+        ["sh", "-c", 'umask 077; cat > "$1"', "sh", listPath],
+        Buffer.from(restoreList),
+      );
       tool(
         [
           "pg_restore",
+          `--use-list=${listPath}`,
           "--username=postgres",
           `--dbname=${backupDatabase}`,
           "--no-owner",
