@@ -1,20 +1,22 @@
 # Sprint 1 — Đặc tả dự thảo và phương án cần duyệt
 
 Status: DRAFT — chưa duyệt implementation
-Version: 0.3
+Version: 0.4
 Prepared: 2026-11-13 (Asia/Ho_Chi_Minh)
-Baseline: main bac54ba921aeddd37fbf19e35e11104e69a3f791; TASK-0001 ACCEPTED
+Baseline: main b04b69d1c63ae9f0a9aa525944c15056efe76ef0; TASK-0002 ACCEPTED
 Preparation task: [TASK-0002](../../tasks/TASK-0002.md), chỉ `DOCUMENTATION_ONLY`; nghiệm thu tài liệu không cho phép code Sprint 1
+
+Proposal package: [D-08/D-09/ADR-002](../decisions/SPRINT-1-APPROVAL.md), chưa duyệt. [TASK-0003](../../tasks/TASK-0003.md) đề xuất chỉ S1-A; chưa READY, chưa code/deploy.
 
 ## 1. Mục tiêu, ranh giới và phân tách Facts / Proposals / Unknowns
 
 ### 1.1 Mục tiêu đề xuất cho Sprint 1 (PROPOSAL)
 
-Một người dùng được xác thực qua cơ chế doanh nghiệp đã được chủ dự án/IT phê duyệt, được ánh xạ (mapping) tới một hồ sơ nhân sự và phòng ban hợp lệ trong chi nhánh, chỉ được phép thực hiện đúng hành động và chỉ nhìn thấy dữ liệu thuộc phạm vi (scope) được cấp bởi backend. Ưu tiên triển khai theo các phần nhỏ (slices) có thể kiểm thử và nghiệm thu độc lập, không dựng nhiều màn hình trước khi chốt quyền.
+Một người dùng được xác thực qua IdP đã được chủ dự án/IT phê duyệt theo phạm vi; gói DEVTEST hiện đề xuất Keycloak synthetic, không nghiệm thu SSO doanh nghiệp, được ánh xạ (mapping) tới một hồ sơ nhân sự và phòng ban hợp lệ trong chi nhánh, chỉ được phép thực hiện đúng hành động và chỉ nhìn thấy dữ liệu thuộc phạm vi (scope) được cấp bởi backend. Ưu tiên triển khai theo các phần nhỏ (slices) có thể kiểm thử và nghiệm thu độc lập, không dựng nhiều màn hình trước khi chốt quyền.
 
 ### 1.2 Phân tách trạng thái thông tin
 
-- **Facts (Sự thật hiện có trên repo tại `main` `bac54ba921aeddd37fbf19e35e11104e69a3f791`):**
+- **Facts (Sự thật hiện có trên repo tại `main` `b04b69d1c63ae9f0a9aa525944c15056efe76ef0`):**
   - Scaffold kỹ thuật và bộ cổng kiểm tra chất lượng/bảo mật của Sprint 0 (`TASK-0001`) đã `ACCEPTED` và hợp nhất qua [PR #3](https://github.com/vannhan091289-ux/baocaobanhang/pull/3).
   - Mã nguồn ứng dụng hiện tại chỉ gồm `src/app/layout.tsx`, `src/app/page.tsx` và `src/app/globals.css` hiển thị trạng thái tĩnh trung tính.
   - Chưa có mã nguồn xác thực/SSO, quản lý phiên, cơ sở dữ liệu, ORM, schema, migration, danh mục phòng/nhân viên hay kiểm tra quyền RBAC tại runtime.
@@ -81,7 +83,7 @@ Các khái niệm dưới đây chỉ nhằm làm rõ ranh giới nghiệp vụ 
 
 ### 4.1 Quyết định `D-08` — Xác thực doanh nghiệp (SSO / IdP & Session Policy)
 
-Trạng thái: **OPEN** (hoãn từ Sprint 0 theo [DECISIONS.md](../DECISIONS.md); chưa chọn IdP, thư viện hay giao thức).
+Trạng thái: **OPEN** (hoãn từ Sprint 0 theo [DECISIONS.md](../DECISIONS.md); chưa phê duyệt lựa chọn; đề xuất cụ thể ở gói xin duyệt).
 
 | Tiêu chí so sánh | Phương án A — Tích hợp trực tiếp IdP doanh nghiệp hiện có (Non-prod/Test Tenant của tổ chức) | Phương án B — Môi trường IdP/OIDC chuẩn hóa tách biệt cho dev/test (chỉ dữ liệu synthetic) |
 |---|---|---|
@@ -167,7 +169,7 @@ Các phần việc dưới đây là đề xuất chia nhỏ để giảm rủi 
 
 ## 7. Danh sách câu hỏi ngắn gọn trình Chủ dự án / IT phê duyệt
 
-Để có thể đóng các quyết định mở và tạo task triển khai đầu tiên cho Sprint 1, đề nghị Chủ dự án / bộ phận IT phản hồi các điểm sau (không cần gửi kèm mật khẩu, khóa bí mật hay dữ liệu thật):
+Gói lựa chọn cụ thể hiện nằm ở [SPRINT-1-APPROVAL](../decisions/SPRINT-1-APPROVAL.md); câu hỏi dưới là các trục lựa chọn, không thay thế approval. TASK-0003 chỉ thực hiện S1-A sau READY; S1-B/C cần task sau. Không gửi mật khẩu, khóa bí mật hay dữ liệu thật.
 
 1. **Chốt `D-08` (Xác thực & Phiên):**
    - Chọn **Phương án A** (tích hợp non-prod tenant của IdP doanh nghiệp hiện có) hay **Phương án B** (dùng OIDC test provider chuẩn hóa với dữ liệu synthetic cho dev/test)?
