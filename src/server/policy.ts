@@ -35,7 +35,15 @@ export type PolicyAction =
   | "kpi.actual.write"
   | "kpi.actual.reconcile"
   | "kpi.actual.adjust_final"
-  | "dashboard.overview.read";
+  | "dashboard.overview.read"
+  | "pipeline.read"
+  | "pipeline.write"
+  | "alerts.rule.read"
+  | "alerts.rule.write"
+  | "alerts.read"
+  | "alerts.evaluate"
+  | "alerts.read_mark"
+  | "alerts.resolve";
 
 export interface DepartmentRecord {
   id: string;
@@ -704,6 +712,93 @@ export function evaluateActionAuthorization(
           reasonCode: "MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN",
         };
       }
+    }
+
+    if (role === "EXECUTIVE") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_BRANCH_SCOPE",
+      };
+    }
+
+    if (role === "DEPARTMENT_MANAGER") {
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_DEPARTMENT_SCOPE",
+      };
+    }
+
+    if (role === "STAFF") {
+      if (targetStaffId && targetStaffId !== actorStaffId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_STAFF_SELF_SCOPE_DENIED",
+        };
+      }
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_SELF_SCOPE",
+      };
+    }
+  }
+
+  // P0C Pipeline (Prospect/Lead/Opportunity) & In-App P0 Alerts (TASK-0009):
+  // - CONFIG_ADMIN can read/write alert_rule_configs ONLY; denied 403 on pipeline and business alerts.
+  // - Business roles (EXECUTIVE=BRANCH, DEPARTMENT_MANAGER=DEPARTMENT, STAFF=SELF) can read/write pipeline & alerts in scope.
+  if (action === "alerts.rule.read" || action === "alerts.rule.write") {
+    if (role === "CONFIG_ADMIN") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_CONFIG_ADMIN",
+      };
+    }
+    if (action === "alerts.rule.read" && role === "EXECUTIVE") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_BRANCH_SCOPE",
+      };
+    }
+    return {
+      decision: "DENY",
+      httpStatus: 403,
+      reasonCode: "CONFIG_ADMIN_REQUIRED_FOR_ALERT_RULES",
+    };
+  }
+
+  if (
+    action === "pipeline.read" ||
+    action === "pipeline.write" ||
+    action === "alerts.read" ||
+    action === "alerts.evaluate" ||
+    action === "alerts.read_mark" ||
+    action === "alerts.resolve"
+  ) {
+    if (role === "CONFIG_ADMIN") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
+      };
     }
 
     if (role === "EXECUTIVE") {

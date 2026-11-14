@@ -1,0 +1,45 @@
+TASK-0009 (P0C: Prospect/Lead/Opportunity Pipeline & In-App P0 Alerts) Gate Evidence
+Branch: feat/TASK-0009-p0c-pipeline-and-inapp-alerts
+Date: 2026-11-14
+
+1. npm run db:migrate:up
+   - Applied migrations/0007_p0c_pipeline_and_alerts.sql
+   - Seeded 6 P0 alert_rule_configs rows
+   - Status: PASS (exit 0)
+
+2. npm run format:check
+   - Command: prettier --check .
+   - Status: PASS (exit 0, All matched files use Prettier code style!)
+
+3. npm run lint
+   - Command: eslint . --max-warnings=0
+   - Status: PASS (exit 0)
+
+4. npm run typecheck
+   - Command: tsc --noEmit
+   - Status: PASS (exit 0)
+
+5. npm run test:unit
+   - Command: vitest run
+   - Status: PASS (exit 0, 11/11 test files, 41/41 tests)
+
+6. npm run test:integration
+   - Command: vitest run --config vitest.integration.config.ts
+   - Status: PASS (exit 0, 7/7 test files, 37/37 tests, includes pg_dump/pg_restore proof)
+
+7. npm run build
+   - Command: next build
+   - Status: PASS (exit 0)
+
+8. npm run test:e2e
+   - Command: playwright test
+   - Status: PASS (exit 0, 10/10 tests, 27.7s)
+
+9. npm run security
+   - Command: sh scripts/security.sh
+   - Status: PASS (exit 0, 52 commits scanned, 0 leaks, 0 high/critical npm audit findings)
+
+10. Break -> Fail -> Restore -> Pass
+    - Target: src/server/pipeline/state-machine.ts line 27 (PROSPECT_TRANSITIONS.NEW temporarily allowed CONVERTED)
+    - Break: npx vitest run tests/unit/p0c-pipeline-alerts-policy.test.ts -> FAIL (expected true to be false)
+    - Restore: restored NEW: ["NEW", "QUALIFIED", "ARCHIVED"] -> PASS (2/2 tests)
