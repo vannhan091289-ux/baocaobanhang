@@ -777,4 +777,75 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await staffContext.close();
     }
   });
+
+  test("TASK-0011 AC-01/AC-02: Multi-role end-to-end UAT navigation across all 5 modules + Alerts with 0 console/page errors", async ({
+    browser,
+  }) => {
+    const execContext = await browser.newContext();
+    const staffContext = await browser.newContext();
+    const execPage = await execContext.newPage();
+    const staffPage = await staffContext.newPage();
+
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    for (const p of [execPage, staffPage]) {
+      p.on("console", (msg) => {
+        if (msg.type() === "error") consoleErrors.push(msg.text());
+      });
+      p.on("pageerror", (err) => pageErrors.push(err.message));
+    }
+
+    try {
+      const password = getSyntheticPassword();
+
+      // 1. BRANCH_EXEC (syn.exec01) walks all 5 navigation groups + Alerts
+      await execPage.goto("/auth/login");
+      await execPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await execPage.locator("#username").fill("syn.exec01");
+      await execPage.locator("#password").fill(password);
+      await execPage.locator("#kc-login").click();
+      await execPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      const execRoutes: Array<{ testId: string; url: string }> = [
+        { testId: "nav-kpi-targets", url: "/workspace/kpi-targets" },
+        { testId: "nav-planning", url: "/workspace/planning" },
+        { testId: "nav-dashboard", url: "/workspace/dashboard" },
+        { testId: "nav-pipeline", url: "/workspace/pipeline" },
+        { testId: "nav-alerts", url: "/workspace/alerts" },
+        { testId: "nav-customers", url: "/workspace/customers" },
+      ];
+
+      for (const route of execRoutes) {
+        await execPage.goto("/workspace");
+        await execPage.getByTestId(route.testId).click();
+        await execPage.waitForURL(`http://127.0.0.1:3100${route.url}`);
+        await expect(execPage.locator("h1")).toBeVisible();
+      }
+
+      // Verify Dashboard overview + drilldown render on BRANCH_EXEC
+      await execPage.goto("/workspace/dashboard");
+      await expect(execPage.getByTestId("dashboard-groups")).toBeVisible();
+
+      // 2. STAFF (syn.staff.khcn) walks self-scoped navigation
+      await staffPage.goto("/auth/login");
+      await staffPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await staffPage.locator("#username").fill("syn.staff.khcn");
+      await staffPage.locator("#password").fill(password);
+      await staffPage.locator("#kc-login").click();
+      await staffPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      for (const route of execRoutes) {
+        await staffPage.goto("/workspace");
+        await staffPage.getByTestId(route.testId).click();
+        await staffPage.waitForURL(`http://127.0.0.1:3100${route.url}`);
+        await expect(staffPage.locator("h1")).toBeVisible();
+      }
+
+      expect(consoleErrors).toEqual([]);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await execContext.close();
+      await staffContext.close();
+    }
+  });
 });
