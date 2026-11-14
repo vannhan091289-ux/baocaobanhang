@@ -178,4 +178,105 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
     const meRes = await page.request.get("/api/me");
     expect(meRes.status()).toBe(401);
   });
+
+  test("S1-B Maker-Checker E2E: CONFIG_ADMIN creates synthetic Staff & Role Proposal in UI, EXECUTIVE approves Proposal in UI (AC-05, AC-09)", async ({
+    browser,
+  }) => {
+    const password = getSyntheticPassword();
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    const uniqueCode = `SYN-E2E-${Date.now().toString(36).toUpperCase()}`;
+
+    // Step 1: Login as CONFIG_ADMIN (syn.admin01) in Maker browser context
+    const adminContext = await browser.newContext();
+    const adminPage = await adminContext.newPage();
+    adminPage.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    adminPage.on("pageerror", (err) => {
+      pageErrors.push(err.message);
+    });
+
+    try {
+      await adminPage.goto("/auth/login");
+      await adminPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await adminPage.locator("#username").fill("syn.admin01");
+      await adminPage.locator("#password").fill(password);
+      await adminPage.locator("#kc-login").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await expect(
+        adminPage.getByTestId("s1b-org-management-panel"),
+      ).toBeVisible();
+      await expect(
+        adminPage.getByTestId("s1b-create-staff-form"),
+      ).toBeVisible();
+
+      // Create new Staff via UI form
+      await adminPage.getByTestId("input-staff-code").fill(uniqueCode);
+      await adminPage
+        .getByTestId("input-staff-name")
+        .fill(`Nhân sự E2E ${uniqueCode} (Synthetic)`);
+      await adminPage.getByTestId("submit-create-staff").click();
+
+      await expect(adminPage.getByTestId("s1b-status-banner")).toContainText(
+        uniqueCode,
+      );
+      await expect(
+        adminPage.getByTestId(`staff-row-${uniqueCode}`),
+      ).toBeVisible();
+
+      // Create Role Assignment Proposal (Maker) for the newly created Staff
+      await adminPage
+        .getByTestId("input-proposal-reason")
+        .fill(`Đề xuất cấp quyền STAFF E2E cho ${uniqueCode}`);
+      await adminPage.getByTestId("submit-create-proposal").click();
+
+      await expect(
+        adminPage.getByTestId(`proposal-row-${uniqueCode}-PENDING`),
+      ).toBeVisible();
+    } finally {
+      await adminContext.close();
+    }
+
+    // Step 2: Login as EXECUTIVE (syn.exec01) in Checker browser context and approve the PENDING proposal
+    const execContext = await browser.newContext();
+    const execPage = await execContext.newPage();
+    execPage.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    execPage.on("pageerror", (err) => {
+      pageErrors.push(err.message);
+    });
+
+    try {
+      await execPage.goto("/auth/login");
+      await execPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await execPage.locator("#username").fill("syn.exec01");
+      await execPage.locator("#password").fill(password);
+      await execPage.locator("#kc-login").click();
+      await execPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await expect(
+        execPage.getByTestId(`proposal-row-${uniqueCode}-PENDING`),
+      ).toBeVisible();
+      await execPage
+        .getByTestId(`input-decision-reason-${uniqueCode}`)
+        .fill("EXECUTIVE phê duyệt E2E (Synthetic)");
+      await execPage.getByTestId(`approve-proposal-${uniqueCode}`).click();
+
+      await expect(
+        execPage.getByTestId(`proposal-row-${uniqueCode}-APPROVED`),
+      ).toBeVisible();
+      await expect(
+        execPage.getByTestId(`role-assignment-row-${uniqueCode}-ACTIVE`),
+      ).toBeVisible();
+    } finally {
+      await execContext.close();
+    }
+
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
 });

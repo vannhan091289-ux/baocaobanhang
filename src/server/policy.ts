@@ -273,6 +273,10 @@ export interface ActionEvaluationRequest {
   action: PolicyAction;
   targetStaffId?: string;
   targetDepartmentId?: string;
+  /** authz.role.assign only: maker (propose) or checker (decide). Defaults to propose. */
+  roleWorkflowPhase?: "propose" | "decide";
+  /** authz.role.assign decide only: staff who created the proposal. */
+  proposerStaffId?: string;
 }
 
 export interface ActionEvaluationResult {
@@ -289,7 +293,14 @@ export interface ActionEvaluationResult {
 export function evaluateActionAuthorization(
   req: ActionEvaluationRequest,
 ): ActionEvaluationResult {
-  const { actorContext, action, targetStaffId, targetDepartmentId } = req;
+  const {
+    actorContext,
+    action,
+    targetStaffId,
+    targetDepartmentId,
+    roleWorkflowPhase,
+    proposerStaffId,
+  } = req;
 
   if (!actorContext) {
     return {
@@ -320,7 +331,8 @@ export function evaluateActionAuthorization(
     };
   }
 
-  // Role assignment / mutation workflow is not exposed in S1-A, and self-escalation is strictly forbidden
+  // Maker-Checker role workflow (ADR-002 §6.1): CONFIG_ADMIN proposes, EXECUTIVE decides.
+  // Proposer, approver and target Staff must be three different people; no self-escalation.
   if (action === "authz.role.assign") {
     if (targetStaffId && targetStaffId === actorStaffId) {
       return {
@@ -329,14 +341,43 @@ export function evaluateActionAuthorization(
         reasonCode: "SELF_ESCALATION_FORBIDDEN",
       };
     }
+    const phase = roleWorkflowPhase ?? "propose";
+    if (phase === "propose") {
+      if (role !== "CONFIG_ADMIN") {
+        return {
+          decision: "DENY",
+          httpStatus: 403,
+          reasonCode: "ACTION_FORBIDDEN_FOR_ROLE",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_ROLE_PROPOSE_CONFIG_ADMIN",
+      };
+    }
+    if (role !== "EXECUTIVE") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "ACTION_FORBIDDEN_FOR_ROLE",
+      };
+    }
+    if (proposerStaffId && proposerStaffId === actorStaffId) {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "SEPARATION_OF_DUTIES_VIOLATION",
+      };
+    }
     return {
-      decision: "DENY",
-      httpStatus: 403,
-      reasonCode: "S1A_ROLE_ASSIGN_ENDPOINT_NOT_ENABLED",
+      decision: "ALLOW",
+      httpStatus: 200,
+      reasonCode: "ALLOW_ROLE_DECIDE_EXECUTIVE",
     };
   }
 
-  // Organization writes are not exposed in S1-A
+  // Organization writes (S1-B): CONFIG_ADMIN only, BRANCH scope.
   if (action === "org.department.write" || action === "org.staff.write") {
     if (role !== "CONFIG_ADMIN") {
       return {
@@ -346,9 +387,9 @@ export function evaluateActionAuthorization(
       };
     }
     return {
-      decision: "DENY",
-      httpStatus: 403,
-      reasonCode: "S1A_ORG_WRITE_ENDPOINT_NOT_ENABLED",
+      decision: "ALLOW",
+      httpStatus: 200,
+      reasonCode: "ALLOW_ORG_WRITE_CONFIG_ADMIN",
     };
   }
 
