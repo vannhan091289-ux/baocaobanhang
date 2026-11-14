@@ -1,10 +1,11 @@
 # ADR-002 — Authorization và data scope cho Sprint 1 (DEVTEST)
 
 Status: ACCEPTED
-Scope: DEVTEST — chỉ S1-A theo TASK-0003; quyền S1-B/C cần task riêng
-Version: 0.3
+Scope: DEVTEST — S1-A/S1-B/S1-C; S1-B/C approved 2026-11-14 per docs/decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md
+Version: 0.3 (unchanged security model; S1-B/C approval scope extension 2026-11-14)
 Prepared: 2026-11-13 (Asia/Ho_Chi_Minh)
 Approved by: Chủ dự án — chỉ dẫn trực tiếp trong chat điều phối, 2026-11-13; bản ghi nguyên văn tại docs/decisions/SPRINT-1-APPROVAL.md mục 6, PR #5
+DEVTEST scope extension authorization: [Owner approval 2026-11-14](../decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md). Historical pre-approval statements below are superseded only for the DEVTEST task authorization gate; technical security obligations remain. D-05/D-10 OPEN.
 Applies to: Đặc tả Sprint 1 ([docs/specs/SPRINT-1.md](../specs/SPRINT-1.md)); không thay thế [ADR-001](ADR-001-stack.md) đã duyệt cho Sprint 0
 
 ## 1. Bối cảnh, nguồn chuẩn và giới hạn phạm vi
