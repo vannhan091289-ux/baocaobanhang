@@ -1396,6 +1396,8 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
               "pipeline_stage_transitions",
               "alert_rule_configs",
               "in_app_alerts",
+              "customer_references",
+              "customer_milestones",
               "sessions",
               "auth_transactions",
               "audit_events",

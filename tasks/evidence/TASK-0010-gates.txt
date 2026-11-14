@@ -1,0 +1,44 @@
+TASK-0010 (P0D: Scoped Synthetic Customer 360 & End-to-End Drill-down) Gate Evidence
+Branch: feat/TASK-0010-p0d-customer360-and-drilldown
+Date: 2026-11-14
+
+1. npm run db:migrate:up
+   - Applied migrations/0008_p0d_customer360_and_milestones.sql
+   - Status: PASS (exit 0)
+
+2. npm run format:check
+   - Command: prettier --check .
+   - Status: PASS (exit 0, All matched files use Prettier code style!)
+
+3. npm run lint
+   - Command: eslint . --max-warnings=0
+   - Status: PASS (exit 0)
+
+4. npm run typecheck
+   - Command: tsc --noEmit
+   - Status: PASS (exit 0)
+
+5. npm run test:unit
+   - Command: vitest run
+   - Status: PASS (exit 0, 12/12 test files, 43/43 tests)
+
+6. npm run test:integration
+   - Command: vitest run --config vitest.integration.config.ts
+   - Status: PASS (exit 0, 8/8 test files, 38/38 tests, includes pg_dump/pg_restore proof)
+
+7. npm run build
+   - Command: next build
+   - Status: PASS (exit 0)
+
+8. npm run test:e2e
+   - Command: playwright test
+   - Status: PASS (exit 0, 11/11 tests, 25.8s)
+
+9. npm run security
+   - Command: sh scripts/security.sh
+   - Status: PASS (exit 0, 54 commits scanned, 0 leaks, 0 high/critical npm audit findings)
+
+10. Break -> Fail -> Restore -> Pass
+    - Target: src/server/policy.ts line 862 (CONFIG_ADMIN_CUSTOMER_KPI_FORBIDDEN)
+    - Break: npx vitest run tests/unit/p0d-customer360-policy.test.ts -> FAIL (expected 'CONFIG_ADMIN_BROKEN_CHECK' to be 'CONFIG_ADMIN_CUSTOMER_KPI_FORBIDDEN')
+    - Restore: restored CONFIG_ADMIN_CUSTOMER_KPI_FORBIDDEN -> PASS (2/2 tests)
