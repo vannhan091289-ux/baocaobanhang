@@ -30,7 +30,12 @@ export type PolicyAction =
   | "planning.activity.write"
   | "planning.review.read"
   | "planning.review.write"
-  | "planning.directive.write";
+  | "planning.directive.write"
+  | "kpi.actual.read"
+  | "kpi.actual.write"
+  | "kpi.actual.reconcile"
+  | "kpi.actual.adjust_final"
+  | "dashboard.overview.read";
 
 export interface DepartmentRecord {
   id: string;
@@ -608,6 +613,97 @@ export function evaluateActionAuthorization(
         httpStatus: 403,
         reasonCode: "STAFF_MONDAY_REVIEW_WRITE_FORBIDDEN",
       };
+    }
+
+    if (role === "EXECUTIVE") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_BRANCH_SCOPE",
+      };
+    }
+
+    if (role === "DEPARTMENT_MANAGER") {
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_DEPARTMENT_SCOPE",
+      };
+    }
+
+    if (role === "STAFF") {
+      if (targetStaffId && targetStaffId !== actorStaffId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_STAFF_SELF_SCOPE_DENIED",
+        };
+      }
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_SELF_SCOPE",
+      };
+    }
+  }
+
+  // P0B-2 KPI Actuals, Reconciliation & Multi-layer Dashboard (TASK-0008):
+  // - CONFIG_ADMIN has no business-data access -> 403.
+  // - STAFF has SELF read/write on actuals & dashboard, but CANNOT reconcile or adjust FINAL -> 403.
+  // - DEPARTMENT_MANAGER has DEPARTMENT scope (+ maker-checker on FINAL adjustment).
+  // - EXECUTIVE has BRANCH scope (+ maker-checker on FINAL adjustment).
+  if (
+    action === "kpi.actual.read" ||
+    action === "kpi.actual.write" ||
+    action === "kpi.actual.reconcile" ||
+    action === "kpi.actual.adjust_final" ||
+    action === "dashboard.overview.read"
+  ) {
+    if (role === "CONFIG_ADMIN") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
+      };
+    }
+
+    if (action === "kpi.actual.reconcile" && role === "STAFF") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "STAFF_ACTUAL_RECONCILE_FORBIDDEN",
+      };
+    }
+
+    if (action === "kpi.actual.adjust_final") {
+      if (role === "STAFF") {
+        return {
+          decision: "DENY",
+          httpStatus: 403,
+          reasonCode: "STAFF_FINAL_ADJUSTMENT_FORBIDDEN",
+        };
+      }
+      if (proposerStaffId && proposerStaffId === actorStaffId) {
+        return {
+          decision: "DENY",
+          httpStatus: 403,
+          reasonCode: "MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN",
+        };
+      }
     }
 
     if (role === "EXECUTIVE") {
