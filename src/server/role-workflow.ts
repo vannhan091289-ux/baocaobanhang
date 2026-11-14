@@ -14,8 +14,8 @@ import {
   ServiceAbort,
   tamperRejected,
   type Actor,
-  type ServiceFailure,
   type ServiceResult,
+  validationFailure,
 } from "./service-core";
 import {
   escapeLike,
@@ -78,14 +78,6 @@ const PROPOSAL_COLUMNS = `p.id, p.target_staff_id, p.propose_action, p.target_as
   CASE WHEN p.decided_at IS NULL THEN NULL
        ELSE to_char(p.decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END AS decided_at,
   p.applied_assignment_id, p.row_version`;
-
-const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
-
-function validationFailure(field: string, reason: string): ServiceFailure {
-  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
-    details: { field, reason },
-  });
-}
 
 /* -------------------------------------------------------------------------- */
 /* Reads                                                                       */

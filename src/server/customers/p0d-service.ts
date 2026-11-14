@@ -219,11 +219,11 @@ export async function listCustomerReferences(
         tamperRejected("customer360.read", "customer_reference", qv.field),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
 
   const page = readPageParams(url.searchParams);
-  if (!page.ok) return fail(400, "VALIDATION_ERROR", page.reason);
+  if (!page.ok) return fail(400, "VALIDATION_FAILED", page.reason);
 
   const denied = authorize(
     actor,
@@ -286,7 +286,7 @@ export async function createCustomerReference(
   body: unknown,
 ): Promise<ServiceResult<CustomerReferenceRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const allowedCreateKeys = new Set([
     "customer_ref_code",
@@ -320,30 +320,30 @@ export async function createCustomerReference(
   }
   const segCheck = readEnum(body, "segment_code", SEGMENT_CODES);
   if (!segCheck.ok || !segCheck.value) {
-    return fail(400, "VALIDATION_ERROR", "Invalid segment_code");
+    return fail(400, "VALIDATION_FAILED", "Invalid segment_code");
   }
   const nameCheck = readString(body, "display_name", { min: 2, max: 160 });
   if (!nameCheck.ok || !nameCheck.value) {
-    return fail(400, "VALIDATION_ERROR", "Invalid display_name");
+    return fail(400, "VALIDATION_FAILED", "Invalid display_name");
   }
 
   const deptCheck = readUuid(body, "managing_department_id", true);
-  if (!deptCheck.ok) return fail(400, "VALIDATION_ERROR", deptCheck.reason);
+  if (!deptCheck.ok) return fail(400, "VALIDATION_FAILED", deptCheck.reason);
   const staffCheck = readUuid(body, "assigned_staff_id", true);
-  if (!staffCheck.ok) return fail(400, "VALIDATION_ERROR", staffCheck.reason);
+  if (!staffCheck.ok) return fail(400, "VALIDATION_FAILED", staffCheck.reason);
 
   const matCheck = readString(body, "maturity_date", {
     max: 16,
     optional: true,
     pattern: DATE_PATTERN,
   });
-  if (!matCheck.ok) return fail(400, "VALIDATION_ERROR", matCheck.reason);
+  if (!matCheck.ok) return fail(400, "VALIDATION_FAILED", matCheck.reason);
   const renCheck = readString(body, "renewal_date", {
     max: 16,
     optional: true,
     pattern: DATE_PATTERN,
   });
-  if (!renCheck.ok) return fail(400, "VALIDATION_ERROR", renCheck.reason);
+  if (!renCheck.ok) return fail(400, "VALIDATION_FAILED", renCheck.reason);
 
   const targetDeptId = deptCheck.value ?? actor.ctx.department.id;
   const targetStaffId = staffCheck.value ?? actor.ctx.staff_id;
@@ -431,7 +431,7 @@ export async function updateCustomerReference(
   body: unknown,
 ): Promise<ServiceResult<CustomerReferenceRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "display_name",
@@ -447,30 +447,32 @@ export async function updateCustomerReference(
     );
   }
   const expectedVer = readExpectedVersion(body);
-  if (!expectedVer.ok) return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+  if (!expectedVer.ok)
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
 
   const nameCheck = readString(body, "display_name", {
     min: 2,
     max: 160,
     optional: true,
   });
-  if (!nameCheck.ok) return fail(400, "VALIDATION_ERROR", nameCheck.reason);
+  if (!nameCheck.ok) return fail(400, "VALIDATION_FAILED", nameCheck.reason);
   const statusCheck = readEnum(body, "status", CUSTOMER_STATUSES, {
     optional: true,
   });
-  if (!statusCheck.ok) return fail(400, "VALIDATION_ERROR", statusCheck.reason);
+  if (!statusCheck.ok)
+    return fail(400, "VALIDATION_FAILED", statusCheck.reason);
   const matCheck = readString(body, "maturity_date", {
     max: 16,
     optional: true,
     pattern: DATE_PATTERN,
   });
-  if (!matCheck.ok) return fail(400, "VALIDATION_ERROR", matCheck.reason);
+  if (!matCheck.ok) return fail(400, "VALIDATION_FAILED", matCheck.reason);
   const renCheck = readString(body, "renewal_date", {
     max: 16,
     optional: true,
     pattern: DATE_PATTERN,
   });
-  if (!renCheck.ok) return fail(400, "VALIDATION_ERROR", renCheck.reason);
+  if (!renCheck.ok) return fail(400, "VALIDATION_FAILED", renCheck.reason);
 
   const preDenied = authorize(
     actor,
@@ -565,7 +567,7 @@ export async function createCustomerMilestone(
   body: unknown,
 ): Promise<ServiceResult<CustomerMilestoneRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "milestone_type",
@@ -583,25 +585,26 @@ export async function createCustomerMilestone(
 
   const typeCheck = readEnum(body, "milestone_type", MILESTONE_TYPES);
   if (!typeCheck.ok || !typeCheck.value) {
-    return fail(400, "VALIDATION_ERROR", "Invalid milestone_type");
+    return fail(400, "VALIDATION_FAILED", "Invalid milestone_type");
   }
   const dueCheck = readString(body, "due_date", {
     max: 16,
     pattern: DATE_PATTERN,
   });
   if (!dueCheck.ok || !dueCheck.value) {
-    return fail(400, "VALIDATION_ERROR", "due_date must be YYYY-MM-DD");
+    return fail(400, "VALIDATION_FAILED", "due_date must be YYYY-MM-DD");
   }
   const titleCheck = readString(body, "title", { min: 2, max: 200 });
   if (!titleCheck.ok || !titleCheck.value) {
-    return fail(400, "VALIDATION_ERROR", "Invalid milestone title");
+    return fail(400, "VALIDATION_FAILED", "Invalid milestone title");
   }
   const statusCheck = readEnum(body, "status", MILESTONE_STATUSES, {
     optional: true,
   });
-  if (!statusCheck.ok) return fail(400, "VALIDATION_ERROR", statusCheck.reason);
+  if (!statusCheck.ok)
+    return fail(400, "VALIDATION_FAILED", statusCheck.reason);
   const noteCheck = readString(body, "note", { max: 500, optional: true });
-  if (!noteCheck.ok) return fail(400, "VALIDATION_ERROR", noteCheck.reason);
+  if (!noteCheck.ok) return fail(400, "VALIDATION_FAILED", noteCheck.reason);
 
   const preDenied = authorize(
     actor,
@@ -830,7 +833,7 @@ export async function getDashboardDrilldown(
         ),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
 
   const levelRaw = url.searchParams.get("level") ?? "BRANCH";
@@ -839,7 +842,7 @@ export async function getDashboardDrilldown(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "level must be BRANCH, DEPARTMENT, STAFF, or ITEM",
     );
   }

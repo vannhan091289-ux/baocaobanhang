@@ -848,4 +848,22 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await staffContext.close();
     }
   });
+
+  test("TASK-0012: serves security headers on page & API routes without X-Powered-By", async ({
+    request,
+  }) => {
+    for (const path of ["/", "/api/me"]) {
+      const res = await request.get(path);
+      const headers = res.headers();
+      expect(headers["x-content-type-options"]).toBe("nosniff");
+      expect(headers["x-frame-options"]).toBe("DENY");
+      expect(headers["referrer-policy"]).toBe(
+        "strict-origin-when-cross-origin",
+      );
+      expect(headers["permissions-policy"]).toBe(
+        "camera=(), microphone=(), geolocation=()",
+      );
+      expect(headers["x-powered-by"]).toBeUndefined();
+    }
+  });
 });

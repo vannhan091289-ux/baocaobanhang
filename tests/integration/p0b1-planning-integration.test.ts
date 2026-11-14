@@ -486,4 +486,57 @@ describe("P0B-1 Integration Tests: Sales Plans, Single-Source Activity Log & Mon
     );
     expect(dayPatch.status).toBe(200);
   });
+
+  it("TASK-0012: returns 422 VALIDATION_FAILED with details.field across p0b1 endpoints", async () => {
+    const staffKhcn = await makeActorForUserKey("staff_khcn");
+
+    const invalidPlanRes = await postPlansRoute(
+      makeAuthRequest("/api/planning/plans", {
+        method: "POST",
+        actor: staffKhcn,
+        body: {
+          period_type: "INVALID_ENUM",
+          period_key: "2026-W46",
+          title: "Invalid plan",
+        },
+      }),
+    );
+    expect(invalidPlanRes.status).toBe(422);
+    const invalidPlanBody = (await invalidPlanRes.json()) as {
+      error: { code: string; details?: { field?: string; reason?: string } };
+    };
+    expect(invalidPlanBody.error.code).toBe("VALIDATION_FAILED");
+    expect(invalidPlanBody.error.details?.field).toBe("period_type");
+
+    const invalidActRes = await postActivitiesRoute(
+      makeAuthRequest("/api/planning/activities", {
+        method: "POST",
+        actor: staffKhcn,
+        body: {
+          activity_type: "BAD_TYPE",
+          status: "PLANNED",
+          occurred_at: "2026-11-11T09:00:00.000+07:00",
+          outcome_summary: "Invalid activity",
+        },
+      }),
+    );
+    expect(invalidActRes.status).toBe(422);
+    const invalidActBody = (await invalidActRes.json()) as {
+      error: { code: string; details?: { field?: string; reason?: string } };
+    };
+    expect(invalidActBody.error.code).toBe("VALIDATION_FAILED");
+    expect(invalidActBody.error.details?.field).toBe("activity_type");
+
+    const invalidReviewRes = await getReviewsRoute(
+      makeAuthRequest("/api/planning/monday-reviews?week_period_key=BAD_WEEK", {
+        actor: staffKhcn,
+      }),
+    );
+    expect(invalidReviewRes.status).toBe(422);
+    const invalidReviewBody = (await invalidReviewRes.json()) as {
+      error: { code: string; details?: { field?: string; reason?: string } };
+    };
+    expect(invalidReviewBody.error.code).toBe("VALIDATION_FAILED");
+    expect(invalidReviewBody.error.details?.field).toBe("week_period_key");
+  });
 });

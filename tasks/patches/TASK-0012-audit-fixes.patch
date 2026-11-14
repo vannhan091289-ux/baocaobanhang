@@ -1,0 +1,357 @@
+diff --git a/next.config.ts b/next.config.ts
+index 2f6491c..bab5fff 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -1,7 +1,21 @@
+ import type { NextConfig } from "next";
+ 
++const securityHeaders = [
++  { key: "X-Content-Type-Options", value: "nosniff" },
++  { key: "X-Frame-Options", value: "DENY" },
++  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
++  {
++    key: "Permissions-Policy",
++    value: "camera=(), microphone=(), geolocation=()",
++  },
++];
++
+ const nextConfig: NextConfig = {
+   reactStrictMode: true,
++  poweredByHeader: false,
++  async headers() {
++    return [{ source: "/:path*", headers: securityHeaders }];
++  },
+ };
+ 
+ export default nextConfig;
+diff --git a/src/server/api-guard.ts b/src/server/api-guard.ts
+index a620b7a..7f1960b 100644
+--- a/src/server/api-guard.ts
++++ b/src/server/api-guard.ts
+@@ -1,9 +1,9 @@
+ import "server-only";
+-import { timingSafeEqual } from "node:crypto";
+ import { cookies } from "next/headers";
+ import { NextResponse } from "next/server";
+ import { recordDenyAuditSafely } from "./audit";
+ import { getRuntimeConfig } from "./config";
++import { constantTimeEqual } from "./crypto";
+ import { getRuntimePool } from "./db";
+ import type { Actor, ServiceResult } from "./service-core";
+ import {
+@@ -35,12 +35,6 @@ function errorResponse(
+   );
+ }
+ 
+-function safeEqual(a: string, b: string): boolean {
+-  const left = Buffer.from(a);
+-  const right = Buffer.from(b);
+-  return left.length === right.length && timingSafeEqual(left, right);
+-}
+-
+ async function denyAudit(
+   actor: Actor,
+   action: string,
+@@ -178,7 +172,7 @@ export async function handleApi(
+         ? parsed.csrf_token
+         : undefined;
+     const submitted = headerCsrf ?? bodyCsrf;
+-    if (!submitted || !safeEqual(submitted, actor.csrfToken)) {
++    if (!submitted || !constantTimeEqual(submitted, actor.csrfToken)) {
+       await denyAudit(actor, action, opts.resourceType, "CSRF_INVALID");
+       return errorResponse(
+         403,
+diff --git a/src/server/kpi/p0a-service.ts b/src/server/kpi/p0a-service.ts
+index 1b511e4..5fc9ba3 100644
+--- a/src/server/kpi/p0a-service.ts
++++ b/src/server/kpi/p0a-service.ts
+@@ -12,8 +12,9 @@ import {
+   runAuthorityTransaction,
+   tamperRejected,
+   type Actor,
+-  type ServiceFailure,
+   type ServiceResult,
++  validationFailure,
++  created,
+ } from "@/server/service-core";
+ import {
+   escapeLike,
+@@ -24,6 +25,7 @@ import {
+   readPageParams,
+   readString,
+   validateQueryParams,
++  readEnumVal,
+ } from "@/server/validation";
+ 
+ export const KPI_GROUPS = [
+@@ -190,20 +192,6 @@ const PERIOD_KEY_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+ const PERIOD_KEY_WEEK_RE = /^\d{4}-W(0[1-9]|[1-4][0-9]|5[0-3])$/;
+ const NUMERIC_20_2_RE = /^\d{1,18}(\.\d{1,2})?$/;
+ 
+-const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
+-
+-function validationFailure(field: string, reason: string): ServiceFailure {
+-  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
+-    details: { field, reason },
+-  });
+-}
+-
+-function created<T>(
+-  result: Awaited<ReturnType<typeof runAuthorityTransaction<T>>>,
+-): ServiceResult<T> {
+-  return result.ok ? { ...result, status: 201 } : result;
+-}
+-
+ export function isValidPeriodKey(
+   periodType: KpiPeriodType,
+   periodKey: string,
+@@ -369,26 +357,6 @@ function mapTargetRow(
+   };
+ }
+ 
+-function readEnumVal<T extends string>(
+-  obj: Record<string, unknown>,
+-  field: string,
+-  allowed: readonly T[],
+-  optional = false,
+-):
+-  | { ok: true; value: T | undefined }
+-  | { ok: false; field: string; reason: string } {
+-  const raw = obj[field];
+-  if (raw === undefined || raw === null) {
+-    return optional
+-      ? { ok: true, value: undefined }
+-      : { ok: false, field, reason: "REQUIRED" };
+-  }
+-  if (typeof raw !== "string" || !allowed.includes(raw as T)) {
+-    return { ok: false, field, reason: "INVALID_ENUM" };
+-  }
+-  return { ok: true, value: raw as T };
+-}
+-
+ // ============================================================================
+ // 1. Working Calendar (branch_calendar_days, D-03 Option A)
+ // ============================================================================
+diff --git a/src/server/kpi/p0b2-service.ts b/src/server/kpi/p0b2-service.ts
+index deac8ff..7d169f3 100644
+--- a/src/server/kpi/p0b2-service.ts
++++ b/src/server/kpi/p0b2-service.ts
+@@ -23,6 +23,7 @@ import {
+   readPageParams,
+   readString,
+   validateQueryParams,
++  isValidIsoDate,
+ } from "@/server/validation";
+ import {
+   KPI_PERIOD_TYPES,
+@@ -162,12 +163,6 @@ function formatPgDate(val: unknown): string {
+   return String(val).slice(0, 10);
+ }
+ 
+-function isValidIsoDate(value: string): boolean {
+-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+-  const dt = new Date(`${value}T00:00:00Z`);
+-  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === value;
+-}
+-
+ function readNullableActualNumber(
+   value: unknown,
+   field: string,
+diff --git a/src/server/org-service.ts b/src/server/org-service.ts
+index 4bf2e68..3a80de6 100644
+--- a/src/server/org-service.ts
++++ b/src/server/org-service.ts
+@@ -15,6 +15,8 @@ import {
+   type Actor,
+   type ServiceFailure,
+   type ServiceResult,
++  validationFailure,
++  created,
+ } from "./service-core";
+ import {
+   escapeLike,
+@@ -60,20 +62,6 @@ const STAFF_COLUMNS =
+   "id, staff_code, display_name, department_id, status, row_version";
+ const IDENTITY_COLUMNS = "id, staff_id, issuer, subject, status, row_version";
+ 
+-const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
+-
+-function validationFailure(field: string, reason: string): ServiceFailure {
+-  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
+-    details: { field, reason },
+-  });
+-}
+-
+-function created<T>(
+-  result: Awaited<ReturnType<typeof runAuthorityTransaction<T>>>,
+-): ServiceResult<T> {
+-  return result.ok ? { ...result, status: 201 } : result;
+-}
+-
+ /* -------------------------------------------------------------------------- */
+ /* Scope helper: server-derived WHERE for staff-shaped tables                  */
+ /* -------------------------------------------------------------------------- */
+diff --git a/src/server/pipeline/p0c-pipeline-service.ts b/src/server/pipeline/p0c-pipeline-service.ts
+index 7097c14..284542f 100644
+--- a/src/server/pipeline/p0c-pipeline-service.ts
++++ b/src/server/pipeline/p0c-pipeline-service.ts
+@@ -23,6 +23,7 @@ import {
+   readPageParams,
+   readString,
+   validateQueryParams,
++  isValidIsoDate,
+ } from "@/server/validation";
+ import {
+   isValidLeadTransition,
+@@ -106,12 +107,6 @@ function formatPgDate(val: unknown): string | null {
+   return String(val).slice(0, 10);
+ }
+ 
+-function isValidIsoDate(value: string): boolean {
+-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+-  const dt = new Date(`${value}T00:00:00Z`);
+-  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === value;
+-}
+-
+ function mapProspect(r: Record<string, unknown>): ProspectRow {
+   return {
+     id: String(r.id),
+diff --git a/src/server/planning/p0b1-service.ts b/src/server/planning/p0b1-service.ts
+index 363788a..cf59858 100644
+--- a/src/server/planning/p0b1-service.ts
++++ b/src/server/planning/p0b1-service.ts
+@@ -24,6 +24,7 @@ import {
+   readPageParams,
+   readString,
+   validateQueryParams,
++  readEnumVal,
+ } from "@/server/validation";
+ 
+ export const PLAN_PERIOD_TYPES = ["WEEK", "DAY"] as const;
+@@ -262,26 +263,6 @@ function validationFailure(field: string, reason: string): ServiceFailure {
+   );
+ }
+ 
+-function readEnumVal<T extends string>(
+-  obj: Record<string, unknown>,
+-  field: string,
+-  allowed: readonly T[],
+-  optional = false,
+-):
+-  | { ok: true; value: T | undefined }
+-  | { ok: false; field: string; reason: string } {
+-  const raw = obj[field];
+-  if (raw === undefined || raw === null) {
+-    return optional
+-      ? { ok: true, value: undefined }
+-      : { ok: false, field, reason: "REQUIRED" };
+-  }
+-  if (typeof raw !== "string" || !allowed.includes(raw as T)) {
+-    return { ok: false, field, reason: "INVALID_ENUM" };
+-  }
+-  return { ok: true, value: raw as T };
+-}
+-
+ function readOptionalIsoTimestamp(
+   obj: Record<string, unknown>,
+   field: string,
+diff --git a/src/server/role-workflow.ts b/src/server/role-workflow.ts
+index 162019e..452b4bf 100644
+--- a/src/server/role-workflow.ts
++++ b/src/server/role-workflow.ts
+@@ -14,8 +14,8 @@ import {
+   ServiceAbort,
+   tamperRejected,
+   type Actor,
+-  type ServiceFailure,
+   type ServiceResult,
++  validationFailure,
+ } from "./service-core";
+ import {
+   escapeLike,
+@@ -79,14 +79,6 @@ const PROPOSAL_COLUMNS = `p.id, p.target_staff_id, p.propose_action, p.target_as
+        ELSE to_char(p.decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END AS decided_at,
+   p.applied_assignment_id, p.row_version`;
+ 
+-const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
+-
+-function validationFailure(field: string, reason: string): ServiceFailure {
+-  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
+-    details: { field, reason },
+-  });
+-}
+-
+ /* -------------------------------------------------------------------------- */
+ /* Reads                                                                       */
+ /* -------------------------------------------------------------------------- */
+diff --git a/src/server/service-core.ts b/src/server/service-core.ts
+index 4548efb..dcd6092 100644
+--- a/src/server/service-core.ts
++++ b/src/server/service-core.ts
+@@ -256,3 +256,20 @@ export async function runAuthorityTransaction<T>(
+     );
+   }
+ }
++
++export const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
++
++export function validationFailure(
++  field: string,
++  reason: string,
++): ServiceFailure {
++  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
++    details: { field, reason },
++  });
++}
++
++export function created<T>(
++  result: Awaited<ReturnType<typeof runAuthorityTransaction<T>>>,
++): ServiceResult<T> {
++  return result.ok ? { ...result, status: 201 } : result;
++}
+diff --git a/src/server/validation.ts b/src/server/validation.ts
+index 9288bfd..ebfa2c8 100644
+--- a/src/server/validation.ts
++++ b/src/server/validation.ts
+@@ -268,3 +268,29 @@ export function readPageParams(
+ export function escapeLike(text: string): string {
+   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+ }
++
++export function readEnumVal<T extends string>(
++  obj: Record<string, unknown>,
++  field: string,
++  allowed: readonly T[],
++  optional = false,
++):
++  | { ok: true; value: T | undefined }
++  | { ok: false; field: string; reason: string } {
++  const raw = obj[field];
++  if (raw === undefined || raw === null) {
++    return optional
++      ? { ok: true, value: undefined }
++      : { ok: false, field, reason: "REQUIRED" };
++  }
++  if (typeof raw !== "string" || !allowed.includes(raw as T)) {
++    return { ok: false, field, reason: "INVALID_ENUM" };
++  }
++  return { ok: true, value: raw as T };
++}
++
++export function isValidIsoDate(value: string): boolean {
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
++  const dt = new Date(`${value}T00:00:00Z`);
++  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === value;
++}
+diff --git a/tests/unit/s1a-review-regressions.test.ts b/tests/unit/s1a-review-regressions.test.ts
+index 5304c42..5dff4bd 100644
+--- a/tests/unit/s1a-review-regressions.test.ts
++++ b/tests/unit/s1a-review-regressions.test.ts
+@@ -176,6 +176,7 @@ esac
+             env: {
+               ...process.env,
+               PATH: `${temp}:${process.env.PATH}`,
++              GITHUB_ACTIONS: "true",
+               REVIEW_DOCKER_LOG: log,
+             },
+             stdio: "pipe",

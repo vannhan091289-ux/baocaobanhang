@@ -23,6 +23,7 @@ import {
   readPageParams,
   readString,
   validateQueryParams,
+  isValidIsoDate,
 } from "@/server/validation";
 import {
   isValidLeadTransition,
@@ -104,12 +105,6 @@ function formatPgDate(val: unknown): string | null {
     return `${y}-${m}-${d}`;
   }
   return String(val).slice(0, 10);
-}
-
-function isValidIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const dt = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === value;
 }
 
 function mapProspect(r: Record<string, unknown>): ProspectRow {
@@ -230,22 +225,26 @@ export async function listProspects(
         tamperRejected("pipeline.read", "prospect", qv.field),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
   const page = readPageParams(url.searchParams);
-  if (!page.ok) return fail(400, "VALIDATION_ERROR", page.reason);
+  if (!page.ok) return fail(400, "VALIDATION_FAILED", page.reason);
 
   const deptParam = url.searchParams.get("department_id") ?? undefined;
   const ownerParam = url.searchParams.get("owner_staff_id") ?? undefined;
   const stageParam = url.searchParams.get("stage") ?? undefined;
   if (deptParam && !isUuid(deptParam)) {
-    return fail(400, "VALIDATION_ERROR", "department_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "department_id must be a valid UUID");
   }
   if (ownerParam && !isUuid(ownerParam)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
   if (stageParam && !PROSPECT_STAGES.includes(stageParam as ProspectStage)) {
-    return fail(400, "VALIDATION_ERROR", "Invalid stage");
+    return fail(400, "VALIDATION_FAILED", "Invalid stage");
   }
 
   const denied = authorize(
@@ -313,7 +312,7 @@ export async function createProspect(
   body: unknown,
 ): Promise<ServiceResult<ProspectRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "prospect_ref",
@@ -342,19 +341,23 @@ export async function createProspect(
   const notesCheck = readString(body, "notes", { max: 500, optional: true });
 
   for (const r of [refCheck, labelCheck, segCheck, ownerCheck, notesCheck]) {
-    if (!r.ok) return fail(400, "VALIDATION_ERROR", r.reason);
+    if (!r.ok) return fail(400, "VALIDATION_FAILED", r.reason);
   }
   if (!segCheck.ok || !SEGMENTS.includes(segCheck.value as SegmentCode)) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "segment_code must be RETAIL, SME, or CORP",
     );
   }
   const ownerId =
     ownerCheck.ok && ownerCheck.value ? ownerCheck.value : actor.ctx.staff_id;
   if (!isUuid(ownerId)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
 
   const refVal = refCheck.ok ? refCheck.value! : "";
@@ -453,7 +456,7 @@ export async function patchProspect(
   body: unknown,
 ): Promise<ServiceResult<ProspectRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "id",
@@ -471,10 +474,11 @@ export async function patchProspect(
   }
   const idCheck = readString(body, "id", { max: 64 });
   if (!idCheck.ok || !idCheck.value || !isUuid(idCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "id must be a valid UUID");
   }
   const expectedVer = readExpectedVersion(body);
-  if (!expectedVer.ok) return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+  if (!expectedVer.ok)
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
 
   const stageCheck = readString(body, "stage", { max: 24, optional: true });
   const ownerCheck = readString(body, "owner_staff_id", {
@@ -487,17 +491,21 @@ export async function patchProspect(
     optional: true,
   });
   for (const r of [stageCheck, ownerCheck, notesCheck, tNoteCheck]) {
-    if (!r.ok) return fail(400, "VALIDATION_ERROR", r.reason);
+    if (!r.ok) return fail(400, "VALIDATION_FAILED", r.reason);
   }
   if (
     stageCheck.ok &&
     stageCheck.value &&
     !PROSPECT_STAGES.includes(stageCheck.value as ProspectStage)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid stage");
+    return fail(400, "VALIDATION_FAILED", "Invalid stage");
   }
   if (ownerCheck.ok && ownerCheck.value && !isUuid(ownerCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
 
   const recordId = idCheck.value;
@@ -652,22 +660,26 @@ export async function listLeads(
         tamperRejected("pipeline.read", "lead", qv.field),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
   const page = readPageParams(url.searchParams);
-  if (!page.ok) return fail(400, "VALIDATION_ERROR", page.reason);
+  if (!page.ok) return fail(400, "VALIDATION_FAILED", page.reason);
 
   const deptParam = url.searchParams.get("department_id") ?? undefined;
   const ownerParam = url.searchParams.get("owner_staff_id") ?? undefined;
   const stageParam = url.searchParams.get("stage") ?? undefined;
   if (deptParam && !isUuid(deptParam)) {
-    return fail(400, "VALIDATION_ERROR", "department_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "department_id must be a valid UUID");
   }
   if (ownerParam && !isUuid(ownerParam)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
   if (stageParam && !LEAD_STAGES.includes(stageParam as LeadStage)) {
-    return fail(400, "VALIDATION_ERROR", "Invalid stage");
+    return fail(400, "VALIDATION_FAILED", "Invalid stage");
   }
 
   const denied = authorize(
@@ -735,7 +747,7 @@ export async function createLead(
   body: unknown,
 ): Promise<ServiceResult<LeadRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "lead_ref",
@@ -786,21 +798,25 @@ export async function createLead(
     dueCheck,
     notesCheck,
   ]) {
-    if (!r.ok) return fail(400, "VALIDATION_ERROR", r.reason);
+    if (!r.ok) return fail(400, "VALIDATION_FAILED", r.reason);
   }
   if (!grpCheck.ok || !KPI_GROUPS.includes(grpCheck.value as KpiGroupCode)) {
-    return fail(400, "VALIDATION_ERROR", "Invalid need_group_code");
+    return fail(400, "VALIDATION_FAILED", "Invalid need_group_code");
   }
   if (prosCheck.ok && prosCheck.value && !isUuid(prosCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "prospect_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "prospect_id must be a valid UUID");
   }
   if (dueCheck.ok && dueCheck.value && !isValidIsoDate(dueCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "due_date must be YYYY-MM-DD");
+    return fail(400, "VALIDATION_FAILED", "due_date must be YYYY-MM-DD");
   }
   const ownerId =
     ownerCheck.ok && ownerCheck.value ? ownerCheck.value : actor.ctx.staff_id;
   if (!isUuid(ownerId)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
 
   const refVal = refCheck.ok ? refCheck.value! : "";
@@ -909,7 +925,7 @@ export async function patchLead(
   body: unknown,
 ): Promise<ServiceResult<LeadRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "id",
@@ -928,10 +944,11 @@ export async function patchLead(
   }
   const idCheck = readString(body, "id", { max: 64 });
   if (!idCheck.ok || !idCheck.value || !isUuid(idCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "id must be a valid UUID");
   }
   const expectedVer = readExpectedVersion(body);
-  if (!expectedVer.ok) return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+  if (!expectedVer.ok)
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
 
   const stageCheck = readString(body, "stage", { max: 24, optional: true });
   const ownerCheck = readString(body, "owner_staff_id", {
@@ -945,20 +962,24 @@ export async function patchLead(
     optional: true,
   });
   for (const r of [stageCheck, ownerCheck, dueCheck, notesCheck, tNoteCheck]) {
-    if (!r.ok) return fail(400, "VALIDATION_ERROR", r.reason);
+    if (!r.ok) return fail(400, "VALIDATION_FAILED", r.reason);
   }
   if (
     stageCheck.ok &&
     stageCheck.value &&
     !LEAD_STAGES.includes(stageCheck.value as LeadStage)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid stage");
+    return fail(400, "VALIDATION_FAILED", "Invalid stage");
   }
   if (ownerCheck.ok && ownerCheck.value && !isUuid(ownerCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
   if (dueCheck.ok && dueCheck.value && !isValidIsoDate(dueCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "due_date must be YYYY-MM-DD");
+    return fail(400, "VALIDATION_FAILED", "due_date must be YYYY-MM-DD");
   }
 
   const recordId = idCheck.value;
@@ -1120,25 +1141,29 @@ export async function listOpportunities(
         tamperRejected("pipeline.read", "opportunity", qv.field),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
   const page = readPageParams(url.searchParams);
-  if (!page.ok) return fail(400, "VALIDATION_ERROR", page.reason);
+  if (!page.ok) return fail(400, "VALIDATION_FAILED", page.reason);
 
   const deptParam = url.searchParams.get("department_id") ?? undefined;
   const ownerParam = url.searchParams.get("owner_staff_id") ?? undefined;
   const stageParam = url.searchParams.get("stage") ?? undefined;
   if (deptParam && !isUuid(deptParam)) {
-    return fail(400, "VALIDATION_ERROR", "department_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "department_id must be a valid UUID");
   }
   if (ownerParam && !isUuid(ownerParam)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
   if (
     stageParam &&
     !OPPORTUNITY_STAGES.includes(stageParam as OpportunityStage)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid stage");
+    return fail(400, "VALIDATION_FAILED", "Invalid stage");
   }
 
   const denied = authorize(
@@ -1206,7 +1231,7 @@ export async function createOpportunity(
   body: unknown,
 ): Promise<ServiceResult<OpportunityRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "opportunity_ref",
@@ -1257,18 +1282,18 @@ export async function createOpportunity(
     closeCheck,
     notesCheck,
   ]) {
-    if (!r.ok) return fail(400, "VALIDATION_ERROR", r.reason);
+    if (!r.ok) return fail(400, "VALIDATION_FAILED", r.reason);
   }
   if (!grpCheck.ok || !KPI_GROUPS.includes(grpCheck.value as KpiGroupCode)) {
-    return fail(400, "VALIDATION_ERROR", "Invalid kpi_group_code");
+    return fail(400, "VALIDATION_FAILED", "Invalid kpi_group_code");
   }
   if (leadCheck.ok && leadCheck.value && !isUuid(leadCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "lead_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "lead_id must be a valid UUID");
   }
   if (closeCheck.ok && closeCheck.value && !isValidIsoDate(closeCheck.value)) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "expected_close_date must be YYYY-MM-DD",
     );
   }
@@ -1279,7 +1304,7 @@ export async function createOpportunity(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "estimated_value must be a non-negative finite number",
     );
   }
@@ -1287,7 +1312,11 @@ export async function createOpportunity(
   const ownerId =
     ownerCheck.ok && ownerCheck.value ? ownerCheck.value : actor.ctx.staff_id;
   if (!isUuid(ownerId)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
 
   const refVal = refCheck.ok ? refCheck.value! : "";
@@ -1404,7 +1433,7 @@ export async function patchOpportunity(
   body: unknown,
 ): Promise<ServiceResult<OpportunityRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "id",
@@ -1424,10 +1453,11 @@ export async function patchOpportunity(
   }
   const idCheck = readString(body, "id", { max: 64 });
   if (!idCheck.ok || !idCheck.value || !isUuid(idCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "id must be a valid UUID");
   }
   const expectedVer = readExpectedVersion(body);
-  if (!expectedVer.ok) return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+  if (!expectedVer.ok)
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
 
   const stageCheck = readString(body, "stage", { max: 24, optional: true });
   const ownerCheck = readString(body, "owner_staff_id", {
@@ -1450,22 +1480,26 @@ export async function patchOpportunity(
     notesCheck,
     tNoteCheck,
   ]) {
-    if (!r.ok) return fail(400, "VALIDATION_ERROR", r.reason);
+    if (!r.ok) return fail(400, "VALIDATION_FAILED", r.reason);
   }
   if (
     stageCheck.ok &&
     stageCheck.value &&
     !OPPORTUNITY_STAGES.includes(stageCheck.value as OpportunityStage)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid stage");
+    return fail(400, "VALIDATION_FAILED", "Invalid stage");
   }
   if (ownerCheck.ok && ownerCheck.value && !isUuid(ownerCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
   if (closeCheck.ok && closeCheck.value && !isValidIsoDate(closeCheck.value)) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "expected_close_date must be YYYY-MM-DD",
     );
   }
@@ -1477,7 +1511,7 @@ export async function patchOpportunity(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "estimated_value must be a non-negative finite number",
     );
   }

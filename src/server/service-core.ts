@@ -256,3 +256,20 @@ export async function runAuthorityTransaction<T>(
     );
   }
 }
+
+export const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
+
+export function validationFailure(
+  field: string,
+  reason: string,
+): ServiceFailure {
+  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
+    details: { field, reason },
+  });
+}
+
+export function created<T>(
+  result: Awaited<ReturnType<typeof runAuthorityTransaction<T>>>,
+): ServiceResult<T> {
+  return result.ok ? { ...result, status: 201 } : result;
+}

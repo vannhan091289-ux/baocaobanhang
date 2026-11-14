@@ -140,7 +140,7 @@ export async function listAlertRules(
         tamperRejected("alerts.rule.read", "alert_rule_config", qv.field),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
   const denied = authorize(
     actor,
@@ -161,7 +161,7 @@ export async function patchAlertRule(
   body: unknown,
 ): Promise<ServiceResult<AlertRuleConfigRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "id",
@@ -188,13 +188,14 @@ export async function patchAlertRule(
 
   const idCheck = readString(body, "id", { max: 64 });
   if (!idCheck.ok || !idCheck.value || !isUuid(idCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "id must be a valid UUID");
   }
   const expectedVer = readExpectedVersion(body);
-  if (!expectedVer.ok) return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+  if (!expectedVer.ok)
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
 
   const sevCheck = readString(body, "severity", { max: 16, optional: true });
-  if (!sevCheck.ok) return fail(400, "VALIDATION_ERROR", sevCheck.reason);
+  if (!sevCheck.ok) return fail(400, "VALIDATION_FAILED", sevCheck.reason);
   if (
     sevCheck.value &&
     sevCheck.value !== "P0" &&
@@ -203,7 +204,7 @@ export async function patchAlertRule(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "severity must be P0, HIGH, or MEDIUM",
     );
   }
@@ -213,7 +214,7 @@ export async function patchAlertRule(
       !Number.isFinite(body.threshold_value) ||
       body.threshold_value < 0)
   ) {
-    return fail(400, "VALIDATION_ERROR", "threshold_value must be >= 0");
+    return fail(400, "VALIDATION_FAILED", "threshold_value must be >= 0");
   }
   if (
     body.sla_working_days !== undefined &&
@@ -223,7 +224,7 @@ export async function patchAlertRule(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "sla_working_days must be an integer >= 0",
     );
   }
@@ -235,7 +236,7 @@ export async function patchAlertRule(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "escalation_after_working_days must be an integer >= 1",
     );
   }
@@ -331,10 +332,10 @@ export async function listInAppAlerts(
         tamperRejected("alerts.read", "in_app_alert", qv.field),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
   const page = readPageParams(url.searchParams);
-  if (!page.ok) return fail(400, "VALIDATION_ERROR", page.reason);
+  if (!page.ok) return fail(400, "VALIDATION_FAILED", page.reason);
 
   const deptParam = url.searchParams.get("department_id") ?? undefined;
   const ownerParam = url.searchParams.get("owner_staff_id") ?? undefined;
@@ -342,19 +343,23 @@ export async function listInAppAlerts(
   const statusParam = url.searchParams.get("resolution_status") ?? undefined;
 
   if (deptParam && !isUuid(deptParam)) {
-    return fail(400, "VALIDATION_ERROR", "department_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "department_id must be a valid UUID");
   }
   if (ownerParam && !isUuid(ownerParam)) {
-    return fail(400, "VALIDATION_ERROR", "owner_staff_id must be a valid UUID");
+    return fail(
+      400,
+      "VALIDATION_FAILED",
+      "owner_staff_id must be a valid UUID",
+    );
   }
   if (ruleParam && !ALERT_RULE_CODES.includes(ruleParam as AlertRuleCode)) {
-    return fail(400, "VALIDATION_ERROR", "Invalid rule_code");
+    return fail(400, "VALIDATION_FAILED", "Invalid rule_code");
   }
   if (
     statusParam &&
     !ALERT_RESOLUTION_STATUSES.includes(statusParam as AlertResolutionStatus)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid resolution_status");
+    return fail(400, "VALIDATION_FAILED", "Invalid resolution_status");
   }
 
   const denied = authorize(
@@ -428,7 +433,7 @@ export async function evaluateP0Alerts(
   body: unknown,
 ): Promise<ServiceResult<{ created_count: number; alerts: InAppAlertRow[] }>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "as_of_date",
@@ -449,17 +454,18 @@ export async function evaluateP0Alerts(
   if (denied) return finalizeFailure(actor, denied);
 
   const asOfCheck = readString(body, "as_of_date", { max: 16, optional: true });
-  if (!asOfCheck.ok) return fail(400, "VALIDATION_ERROR", asOfCheck.reason);
+  if (!asOfCheck.ok) return fail(400, "VALIDATION_FAILED", asOfCheck.reason);
   const asOfDate = asOfCheck.value ?? "2026-11-14";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
-    return fail(400, "VALIDATION_ERROR", "as_of_date must be YYYY-MM-DD");
+    return fail(400, "VALIDATION_FAILED", "as_of_date must be YYYY-MM-DD");
   }
 
   const periodCheck = readString(body, "period_key", {
     max: 32,
     optional: true,
   });
-  if (!periodCheck.ok) return fail(400, "VALIDATION_ERROR", periodCheck.reason);
+  if (!periodCheck.ok)
+    return fail(400, "VALIDATION_FAILED", periodCheck.reason);
   const periodKey = periodCheck.value ?? asOfDate.slice(0, 7);
 
   const roleCode = actor.ctx.effective_role.role_code;
@@ -775,10 +781,10 @@ export async function markAlertRead(
   body: unknown,
 ): Promise<ServiceResult<InAppAlertRow>> {
   if (!isUuid(alertId)) {
-    return fail(400, "VALIDATION_ERROR", "alertId must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "alertId must be a valid UUID");
   }
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "expected_version",
@@ -790,7 +796,8 @@ export async function markAlertRead(
     );
   }
   const expectedVer = readExpectedVersion(body);
-  if (!expectedVer.ok) return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+  if (!expectedVer.ok)
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
 
   return runAuthorityTransaction(actor, async (client) => {
     const existingRes = await client.query(
@@ -857,10 +864,10 @@ export async function resolveInAppAlert(
   body: unknown,
 ): Promise<ServiceResult<InAppAlertRow>> {
   if (!isUuid(alertId)) {
-    return fail(400, "VALIDATION_ERROR", "alertId must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "alertId must be a valid UUID");
   }
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "expected_version",
@@ -875,16 +882,17 @@ export async function resolveInAppAlert(
     );
   }
   const expectedVer = readExpectedVersion(body);
-  if (!expectedVer.ok) return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+  if (!expectedVer.ok)
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
 
   const statusCheck = readString(body, "resolution_status", { max: 16 });
   if (!statusCheck.ok || !statusCheck.value) {
-    return fail(400, "VALIDATION_ERROR", "resolution_status is required");
+    return fail(400, "VALIDATION_FAILED", "resolution_status is required");
   }
   if (statusCheck.value !== "RESOLVED" && statusCheck.value !== "DISMISSED") {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "resolution_status must be RESOLVED or DISMISSED",
     );
   }
@@ -897,8 +905,8 @@ export async function resolveInAppAlert(
     max: 160,
     optional: true,
   });
-  if (!noteCheck.ok) return fail(400, "VALIDATION_ERROR", noteCheck.reason);
-  if (!evCheck.ok) return fail(400, "VALIDATION_ERROR", evCheck.reason);
+  if (!noteCheck.ok) return fail(400, "VALIDATION_FAILED", noteCheck.reason);
+  if (!evCheck.ok) return fail(400, "VALIDATION_FAILED", evCheck.reason);
 
   if (!noteCheck.value && !evCheck.value) {
     return fail(

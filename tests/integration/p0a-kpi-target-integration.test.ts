@@ -324,7 +324,7 @@ describe("P0A Integration Tests: 7-Group KPI Dictionary, Working Calendar & Targ
     expect(monthTarget.revision_no).toBe(1);
     expect(monthTarget.revisions).toHaveLength(1);
 
-    // 2. Attempting to patch without change_reason is rejected (422 VALIDATION_ERROR)
+    // 2. Attempting to patch without change_reason is rejected (422 VALIDATION_FAILED)
     const noReasonRes = await patchTargetsRoute(
       makeAuthRequest("/api/kpi/targets", {
         method: "PATCH",

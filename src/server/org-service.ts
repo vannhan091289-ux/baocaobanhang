@@ -15,6 +15,8 @@ import {
   type Actor,
   type ServiceFailure,
   type ServiceResult,
+  validationFailure,
+  created,
 } from "./service-core";
 import {
   escapeLike,
@@ -59,20 +61,6 @@ const DEPARTMENT_COLUMNS = "id, code, name, status, row_version";
 const STAFF_COLUMNS =
   "id, staff_code, display_name, department_id, status, row_version";
 const IDENTITY_COLUMNS = "id, staff_id, issuer, subject, status, row_version";
-
-const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
-
-function validationFailure(field: string, reason: string): ServiceFailure {
-  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
-    details: { field, reason },
-  });
-}
-
-function created<T>(
-  result: Awaited<ReturnType<typeof runAuthorityTransaction<T>>>,
-): ServiceResult<T> {
-  return result.ok ? { ...result, status: 201 } : result;
-}
 
 /* -------------------------------------------------------------------------- */
 /* Scope helper: server-derived WHERE for staff-shaped tables                  */
