@@ -173,6 +173,20 @@ export default async function WorkspacePage() {
           >
             Dashboard Đa lớp &amp; Đối soát Actual (P0B-2)
           </Link>
+          <Link
+            className="scaffold-button"
+            href="/workspace/pipeline"
+            data-testid="nav-pipeline"
+          >
+            Pipeline Prospect / Lead / Opportunity (P0C)
+          </Link>
+          <Link
+            className="scaffold-button"
+            href="/workspace/alerts"
+            data-testid="nav-alerts"
+          >
+            Trung tâm Cảnh báo P0 (P0C)
+          </Link>
         </nav>
 
         <form action="/auth/logout" method="POST" className="logout-form">

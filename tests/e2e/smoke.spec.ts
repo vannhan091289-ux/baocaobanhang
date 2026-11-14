@@ -329,7 +329,7 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       ).toBeVisible();
       await execPage.getByTestId(`approve-proposal-${zeroRoleCode}`).click();
       await expect(
-        execPage.getByTestId(`proposal-row-${zeroRoleCode}-APPROVED`),
+        execPage.getByTestId(`proposal-row-${zeroRoleCode}-APPROVED`).first(),
       ).toBeVisible();
 
       // 3. syn.zerorole logs in via Keycloak OIDC and receives the newly granted STAFF (SELF) role
@@ -639,6 +639,73 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
     } finally {
       await adminContext.close();
       await execContext.close();
+    }
+  });
+
+  test("P0C AC-06: pipeline & alerts UI enforces RBAC and creates prospect + evaluates alerts cleanly", async ({
+    browser,
+  }) => {
+    const adminContext = await browser.newContext();
+    const staffContext = await browser.newContext();
+    const adminPage = await adminContext.newPage();
+    const staffPage = await staffContext.newPage();
+
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    for (const p of [adminPage, staffPage]) {
+      p.on("console", (msg) => {
+        if (msg.type() === "error") consoleErrors.push(msg.text());
+      });
+      p.on("pageerror", (err) => pageErrors.push(err.message));
+    }
+
+    try {
+      const password = getSyntheticPassword();
+      await adminPage.goto("/auth/login");
+      await adminPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await adminPage.locator("#username").fill("syn.admin01");
+      await adminPage.locator("#password").fill(password);
+      await adminPage.locator("#kc-login").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await adminPage.getByTestId("nav-pipeline").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/pipeline");
+      await expect(adminPage.getByTestId("pipeline-denied-box")).toBeVisible();
+
+      await adminPage.goto("http://127.0.0.1:3100/workspace/alerts");
+      await expect(adminPage.getByTestId("alerts-denied-box")).toBeVisible();
+
+      await staffPage.goto("/auth/login");
+      await staffPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await staffPage.locator("#username").fill("syn.staff.khcn");
+      await staffPage.locator("#password").fill(password);
+      await staffPage.locator("#kc-login").click();
+      await staffPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await staffPage.getByTestId("nav-pipeline").click();
+      await staffPage.waitForURL("http://127.0.0.1:3100/workspace/pipeline");
+
+      const uniqueRef = `SYN-E2E-P0C-${Date.now()}`;
+      await staffPage.getByTestId("input-prospect-ref").fill(uniqueRef);
+      await staffPage
+        .getByTestId("input-prospect-label")
+        .fill("Synth E2E Prospect");
+      await staffPage.getByTestId("submit-create-prospect").click();
+      await expect(staffPage.getByTestId("pipeline-status")).toContainText(
+        "Đã tạo Prospect synthetic thành công.",
+      );
+
+      await staffPage.goto("http://127.0.0.1:3100/workspace/alerts");
+      await staffPage.getByTestId("btn-evaluate-alerts").click();
+      await expect(staffPage.getByTestId("alerts-status")).toContainText(
+        "Đã quét 6 quy tắc P0",
+      );
+
+      expect(consoleErrors).toEqual([]);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await adminContext.close();
+      await staffContext.close();
     }
   });
 });
