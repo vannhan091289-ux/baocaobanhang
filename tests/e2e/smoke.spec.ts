@@ -425,4 +425,92 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await mgrContext.close();
     }
   });
+
+  test("P0A AC-06: /workspace/kpi-targets 7-group KPI dictionary, working calendar, CONFIG_ADMIN target denial, and EXECUTIVE target allocation", async ({
+    browser,
+  }) => {
+    const password = getSyntheticPassword();
+    const adminContext = await browser.newContext();
+    const execContext = await browser.newContext();
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    try {
+      const adminPage = await adminContext.newPage();
+      const execPage = await execContext.newPage();
+      for (const p of [adminPage, execPage]) {
+        p.on("console", (msg) => {
+          if (msg.type() === "error") consoleErrors.push(msg.text());
+        });
+        p.on("pageerror", (err) => {
+          pageErrors.push(err.message);
+        });
+      }
+
+      // 1. CONFIG_ADMIN logs in and navigates to /workspace/kpi-targets
+      await adminPage.goto("/auth/login");
+      await adminPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await adminPage.locator("#username").fill("syn.admin01");
+      await adminPage.locator("#password").fill(password);
+      await adminPage.locator("#kc-login").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await adminPage.getByTestId("nav-kpi-targets").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/kpi-targets");
+
+      await expect(
+        adminPage.getByRole("heading", {
+          level: 1,
+          name: /Quản trị Từ điển 7 Nhóm KPI/i,
+        }),
+      ).toBeVisible();
+      await expect(
+        adminPage.getByTestId("kpi-definitions-table"),
+      ).toBeVisible();
+      await expect(
+        adminPage.getByTestId("kpi-def-row-LOAN_BALANCE_END"),
+      ).toBeVisible();
+      await expect(
+        adminPage.getByTestId("kpi-def-row-INSURANCE_FY_PREMIUM"),
+      ).toBeVisible();
+      await expect(
+        adminPage.getByTestId("calendar-summary-line"),
+      ).toContainText("Asia/Ho_Chi_Minh");
+      await expect(
+        adminPage.getByTestId("kpi-targets-denied-box"),
+      ).toContainText("CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN");
+
+      // 2. EXECUTIVE logs in, visits /workspace/kpi-targets, and allocates a MONTH KPI target
+      await execPage.goto("/auth/login");
+      await execPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await execPage.locator("#username").fill("syn.exec01");
+      await execPage.locator("#password").fill(password);
+      await execPage.locator("#kc-login").click();
+      await execPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await execPage.getByTestId("nav-kpi-targets").click();
+      await execPage.waitForURL("http://127.0.0.1:3100/workspace/kpi-targets");
+
+      await expect(
+        execPage.getByTestId("create-kpi-target-form"),
+      ).toBeVisible();
+      await execPage.getByTestId("input-target-value").fill("1250000000.00");
+      await execPage
+        .getByTestId("input-target-approval-ref")
+        .fill("E2E-P0A-APPROVAL-001");
+      await execPage.getByTestId("submit-create-kpi-target").click();
+
+      await expect(execPage.getByTestId("kpi-targets-banner")).toContainText(
+        "Đã lưu phân bổ chỉ tiêu KPI thành công",
+      );
+      await expect(execPage.getByTestId("kpi-targets-table")).toContainText(
+        "1250000000.00",
+      );
+
+      expect(consoleErrors).toEqual([]);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await adminContext.close();
+      await execContext.close();
+    }
+  });
 });

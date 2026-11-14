@@ -16,7 +16,14 @@ export type PolicyAction =
   | "customer.read"
   | "customer.write"
   | "kpi.read"
-  | "kpi.write";
+  | "kpi.write"
+  | "kpi.calendar.read"
+  | "kpi.calendar.write"
+  | "kpi.dictionary.read"
+  | "kpi.dictionary.write"
+  | "kpi.target.read"
+  | "kpi.target.write"
+  | "kpi.target.approve";
 
 export interface DepartmentRecord {
   id: string;
@@ -403,6 +410,128 @@ export function evaluateActionAuthorization(
 
   if (action === "org.staff.read" || action === "authz.role.read") {
     if (role === "EXECUTIVE" || role === "CONFIG_ADMIN") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_BRANCH_SCOPE",
+      };
+    }
+
+    if (role === "DEPARTMENT_MANAGER") {
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_DEPARTMENT_SCOPE",
+      };
+    }
+
+    if (role === "STAFF") {
+      if (targetStaffId && targetStaffId !== actorStaffId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_STAFF_SELF_SCOPE_DENIED",
+        };
+      }
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_SELF_SCOPE",
+      };
+    }
+  }
+
+  // P0A: Working Calendar & 7-Group KPI Dictionary metadata (ADR-002 + ADR-003):
+  // All authenticated roles may read calendar & dictionary definitions; only CONFIG_ADMIN may write.
+  if (action === "kpi.calendar.read" || action === "kpi.dictionary.read") {
+    return {
+      decision: "ALLOW",
+      httpStatus: 200,
+      reasonCode: "ALLOW_KPI_METADATA_READ",
+    };
+  }
+
+  if (action === "kpi.calendar.write" || action === "kpi.dictionary.write") {
+    if (role !== "CONFIG_ADMIN") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "ACTION_FORBIDDEN_FOR_ROLE",
+      };
+    }
+    return {
+      decision: "ALLOW",
+      httpStatus: 200,
+      reasonCode: "ALLOW_KPI_METADATA_WRITE_CONFIG_ADMIN",
+    };
+  }
+
+  // P0A: KPI Target Allocation & Approval (ADR-002 + ADR-003):
+  // CONFIG_ADMIN is strictly forbidden from reading or writing business/staff KPI targets.
+  if (
+    action === "kpi.target.read" ||
+    action === "kpi.target.write" ||
+    action === "kpi.target.approve"
+  ) {
+    if (role === "CONFIG_ADMIN") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
+      };
+    }
+
+    if (action === "kpi.target.approve") {
+      if (role !== "EXECUTIVE" && role !== "DEPARTMENT_MANAGER") {
+        return {
+          decision: "DENY",
+          httpStatus: 403,
+          reasonCode: "ACTION_FORBIDDEN_FOR_ROLE",
+        };
+      }
+      if (
+        role === "DEPARTMENT_MANAGER" &&
+        targetDepartmentId &&
+        targetDepartmentId !== actorDeptId
+      ) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      if (proposerStaffId && proposerStaffId === actorStaffId) {
+        return {
+          decision: "DENY",
+          httpStatus: 403,
+          reasonCode: "SEPARATION_OF_DUTIES_VIOLATION",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode:
+          role === "EXECUTIVE"
+            ? "ALLOW_KPI_TARGET_APPROVE_BRANCH"
+            : "ALLOW_KPI_TARGET_APPROVE_DEPARTMENT",
+      };
+    }
+
+    if (role === "EXECUTIVE") {
       return {
         decision: "ALLOW",
         httpStatus: 200,

@@ -900,6 +900,18 @@ describe("S1-C AC-06: Audit Completeness, Full-Table Redaction Scan & Outage Rol
     };
 
     const beforeCounts = await countTables();
+    const deptVer = (
+      await migratorPool.query<{ row_version: number }>(
+        `SELECT row_version FROM departments WHERE id = $1`,
+        [SYNTHETIC_DEPARTMENTS.KHCN.id],
+      )
+    ).rows[0]!.row_version;
+    const staffVer = (
+      await migratorPool.query<{ row_version: number }>(
+        `SELECT row_version FROM staff WHERE id = $1`,
+        [zeroRoleUser.staff!.id],
+      )
+    ).rows[0]!.row_version;
 
     await migratorPool.query(
       `REVOKE INSERT ON TABLE audit_events FROM app_runtime_role`,
@@ -912,7 +924,7 @@ describe("S1-C AC-06: Audit Completeness, Full-Table Redaction Scan & Outage Rol
       const r2 = await patchDepartment(
         adminActor,
         SYNTHETIC_DEPARTMENTS.KHCN.id,
-        { expected_version: 1, name: "Outage Patch" },
+        { expected_version: deptVer, name: "Outage Patch" },
       );
       const r3 = await createStaff(adminActor, {
         staff_code: "SYN-OUTAGE-01",
@@ -920,7 +932,7 @@ describe("S1-C AC-06: Audit Completeness, Full-Table Redaction Scan & Outage Rol
         department_id: SYNTHETIC_DEPARTMENTS.KHCN.id,
       });
       const r4 = await patchStaff(adminActor, zeroRoleUser.staff!.id, {
-        expected_version: 1,
+        expected_version: staffVer,
         display_name: "Outage Staff Patch",
       });
       const r5 = await createProposal(adminActor, {

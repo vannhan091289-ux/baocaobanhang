@@ -1328,11 +1328,17 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
         "identity_links",
         "role_assignments",
         "role_assignment_proposals",
+        "branch_calendar_days",
+        "kpi_definitions",
+        "kpi_targets",
+        "kpi_target_revisions",
         "sessions",
         "auth_transactions",
         "audit_events",
       ] as const) {
-        const query = `SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY id), '[]'::jsonb) AS data FROM public.${table} t`;
+        const orderCol =
+          table === "branch_calendar_days" ? "calendar_date" : "id";
+        const query = `SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY ${orderCol}), '[]'::jsonb) AS data FROM public.${table} t`;
         const original = await admin.query(query);
         const copy = await restored.query(query);
         const digest = (data: unknown) =>
@@ -1374,6 +1380,10 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
               "identity_links",
               "role_assignments",
               "role_assignment_proposals",
+              "branch_calendar_days",
+              "kpi_definitions",
+              "kpi_targets",
+              "kpi_target_revisions",
               "sessions",
               "auth_transactions",
               "audit_events",
