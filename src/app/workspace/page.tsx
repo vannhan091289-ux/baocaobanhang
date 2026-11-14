@@ -143,12 +143,23 @@ export default async function WorkspacePage() {
       >
         <h2 id="module-empty-heading">Trạng thái phân hệ nghiệp vụ</h2>
         <p>
-          Hệ thống đã kích hoạt chuỗi định danh nền tảng (<code>S1-A</code>) và
+          Hệ thống đã kích hoạt chuỗi định danh nền tảng (<code>S1-A</code>),
           quản trị danh mục Tổ chức, Nhân sự &amp; Quy trình phân quyền 2 bước (
-          <code>S1-B</code>). Các phân hệ chỉ tiêu KPI (<code>P0A</code>), kế
-          hoạch &amp; kết quả bán hàng (<code>P0B</code>), cơ hội bán hàng &amp;
-          cảnh báo (<code>P0C</code>) sẽ được mở theo lộ trình tiếp theo.
+          <code>S1-B/S1-C</code>), và phân hệ Từ điển 7 nhóm KPI, Lịch làm việc
+          &amp; Phân bổ chỉ tiêu Năm/Tháng/Tuần/Ngày (<code>P0A</code>).
         </p>
+        <nav
+          aria-label="Điều hướng phân hệ nghiệp vụ"
+          className="scaffold-actions"
+        >
+          <Link
+            className="scaffold-button"
+            href="/workspace/kpi-targets"
+            data-testid="nav-kpi-targets"
+          >
+            Mở Từ điển 7 Nhóm KPI &amp; Chỉ tiêu (P0A)
+          </Link>
+        </nav>
 
         <form action="/auth/logout" method="POST" className="logout-form">
           <input type="hidden" name="csrf_token" value={csrfToken} />
