@@ -12,8 +12,9 @@ import {
   runAuthorityTransaction,
   tamperRejected,
   type Actor,
-  type ServiceFailure,
   type ServiceResult,
+  validationFailure,
+  created,
 } from "@/server/service-core";
 import {
   escapeLike,
@@ -24,6 +25,7 @@ import {
   readPageParams,
   readString,
   validateQueryParams,
+  readEnumVal,
 } from "@/server/validation";
 
 export const KPI_GROUPS = [
@@ -190,20 +192,6 @@ const PERIOD_KEY_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const PERIOD_KEY_WEEK_RE = /^\d{4}-W(0[1-9]|[1-4][0-9]|5[0-3])$/;
 const NUMERIC_20_2_RE = /^\d{1,18}(\.\d{1,2})?$/;
 
-const VALIDATION_MESSAGE = "Dữ liệu đầu vào không hợp lệ.";
-
-function validationFailure(field: string, reason: string): ServiceFailure {
-  return fail(422, "VALIDATION_FAILED", VALIDATION_MESSAGE, {
-    details: { field, reason },
-  });
-}
-
-function created<T>(
-  result: Awaited<ReturnType<typeof runAuthorityTransaction<T>>>,
-): ServiceResult<T> {
-  return result.ok ? { ...result, status: 201 } : result;
-}
-
 export function isValidPeriodKey(
   periodType: KpiPeriodType,
   periodKey: string,
@@ -367,26 +355,6 @@ function mapTargetRow(
     updated_at: new Date(row.updated_at as string | Date).toISOString(),
     revisions,
   };
-}
-
-function readEnumVal<T extends string>(
-  obj: Record<string, unknown>,
-  field: string,
-  allowed: readonly T[],
-  optional = false,
-):
-  | { ok: true; value: T | undefined }
-  | { ok: false; field: string; reason: string } {
-  const raw = obj[field];
-  if (raw === undefined || raw === null) {
-    return optional
-      ? { ok: true, value: undefined }
-      : { ok: false, field, reason: "REQUIRED" };
-  }
-  if (typeof raw !== "string" || !allowed.includes(raw as T)) {
-    return { ok: false, field, reason: "INVALID_ENUM" };
-  }
-  return { ok: true, value: raw as T };
 }
 
 // ============================================================================

@@ -11,8 +11,8 @@ import {
   notFound,
   runAuthorityTransaction,
   tamperRejected,
+  validationFailure,
   type Actor,
-  type ServiceFailure,
   type ServiceResult,
 } from "@/server/service-core";
 import {
@@ -24,6 +24,7 @@ import {
   readPageParams,
   readString,
   validateQueryParams,
+  readEnumVal,
 } from "@/server/validation";
 
 export const PLAN_PERIOD_TYPES = ["WEEK", "DAY"] as const;
@@ -249,37 +250,6 @@ export function getVnDateAndCutoffStatus(
     dateVn,
     isAfterCutoff: hhmm > cutoffHhMm,
   };
-}
-
-function validationFailure(field: string, reason: string): ServiceFailure {
-  return fail(
-    422,
-    "VALIDATION_ERROR",
-    `Trường ${field} không hợp lệ (${reason}).`,
-    {
-      details: { field, reason },
-    },
-  );
-}
-
-function readEnumVal<T extends string>(
-  obj: Record<string, unknown>,
-  field: string,
-  allowed: readonly T[],
-  optional = false,
-):
-  | { ok: true; value: T | undefined }
-  | { ok: false; field: string; reason: string } {
-  const raw = obj[field];
-  if (raw === undefined || raw === null) {
-    return optional
-      ? { ok: true, value: undefined }
-      : { ok: false, field, reason: "REQUIRED" };
-  }
-  if (typeof raw !== "string" || !allowed.includes(raw as T)) {
-    return { ok: false, field, reason: "INVALID_ENUM" };
-  }
-  return { ok: true, value: raw as T };
 }
 
 function readOptionalIsoTimestamp(
@@ -709,20 +679,20 @@ export async function createSalesPlan(
         [requestedStaffId],
       );
       if (staffRes.rowCount === 0) {
-        abort(422, "VALIDATION_ERROR", "Nhân sự không tồn tại.");
+        abort(422, "VALIDATION_FAILED", "Nhân sự không tồn tại.");
       }
       const targetStaff = staffRes.rows[0]!;
       if (targetStaff.status !== "ACTIVE") {
         abort(
           422,
-          "VALIDATION_ERROR",
+          "VALIDATION_FAILED",
           "Không thể lập kế hoạch cho nhân sự đã ngừng hoạt động.",
         );
       }
       if (targetStaff.department_id !== requestedDeptId) {
         abort(
           422,
-          "VALIDATION_ERROR",
+          "VALIDATION_FAILED",
           "Nhân sự không thuộc phòng ban đã chọn.",
         );
       }
@@ -735,7 +705,7 @@ export async function createSalesPlan(
         if (tRes.rowCount === 0) {
           abort(
             422,
-            "VALIDATION_ERROR",
+            "VALIDATION_FAILED",
             "Chỉ tiêu KPI tham chiếu không tồn tại.",
           );
         }
@@ -1323,7 +1293,7 @@ export async function createActivity(
         if (kdRes.rowCount === 0) {
           abort(
             422,
-            "VALIDATION_ERROR",
+            "VALIDATION_FAILED",
             "Chỉ số KPI tham chiếu không tồn tại.",
           );
         }
@@ -1840,7 +1810,7 @@ export async function createMondayReviewOrDirective(
             [departmentId],
           );
           if (dRes.rowCount === 0) {
-            abort(422, "VALIDATION_ERROR", "Phòng ban không tồn tại.");
+            abort(422, "VALIDATION_FAILED", "Phòng ban không tồn tại.");
           }
           deptCode = dRes.rows[0]!.code;
         }
@@ -1975,13 +1945,17 @@ export async function createMondayReviewOrDirective(
         [assigneeV.value!],
       );
       if (staffRes.rowCount === 0) {
-        abort(422, "VALIDATION_ERROR", "Nhân sự được giao việc không tồn tại.");
+        abort(
+          422,
+          "VALIDATION_FAILED",
+          "Nhân sự được giao việc không tồn tại.",
+        );
       }
       const assignee = staffRes.rows[0]!;
       if (assignee.status !== "ACTIVE") {
         abort(
           422,
-          "VALIDATION_ERROR",
+          "VALIDATION_FAILED",
           "Không thể giao chỉ đạo cho nhân sự đã ngừng hoạt động.",
         );
       }

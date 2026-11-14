@@ -268,3 +268,29 @@ export function readPageParams(
 export function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
+
+export function readEnumVal<T extends string>(
+  obj: Record<string, unknown>,
+  field: string,
+  allowed: readonly T[],
+  optional = false,
+):
+  | { ok: true; value: T | undefined }
+  | { ok: false; field: string; reason: string } {
+  const raw = obj[field];
+  if (raw === undefined || raw === null) {
+    return optional
+      ? { ok: true, value: undefined }
+      : { ok: false, field, reason: "REQUIRED" };
+  }
+  if (typeof raw !== "string" || !allowed.includes(raw as T)) {
+    return { ok: false, field, reason: "INVALID_ENUM" };
+  }
+  return { ok: true, value: raw as T };
+}
+
+export function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const dt = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === value;
+}

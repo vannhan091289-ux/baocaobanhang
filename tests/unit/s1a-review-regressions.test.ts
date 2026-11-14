@@ -176,6 +176,7 @@ esac
             env: {
               ...process.env,
               PATH: `${temp}:${process.env.PATH}`,
+              GITHUB_ACTIONS: "true",
               REVIEW_DOCKER_LOG: log,
             },
             stdio: "pipe",

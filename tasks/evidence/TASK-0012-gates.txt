@@ -1,0 +1,22 @@
+TASK-0012 (Audit Cleanup) Verification Evidence
+Branch: fix/TASK-0012-audit-cleanup
+Baseline main SHA: e82e2af5d17008c0384145c2a430d9cd922fda91 (PR #18, TASK-0011 ACCEPTED)
+
+1. Patch & Code Unification:
+- Applied tasks/patches/TASK-0012-audit-fixes.patch cleanly (`git apply --check` -> exit 0).
+- Unified `p0b1-service.ts` to shared `validationFailure` (`422`, `VALIDATION_FAILED`, `details: { field, reason }`).
+- Unified remaining `VALIDATION_ERROR` -> `VALIDATION_FAILED` across `p0b2-service.ts`, `p0c-pipeline-service.ts`, `p0c-alerts-service.ts`, `p0d-service.ts`, and `tests/integration/p0a-kpi-target-integration.test.ts` (`grep -rn VALIDATION_ERROR src tests docs` -> 0 matches).
+- Verified 0 remaining duplicates of `validationFailure`, `created`, `readEnumVal`, `isValidIsoDate`, `safeEqual` in `src/`.
+
+2. Local Quality & Security Gates:
+- npm run format:check -> PASS (0)
+- npm run lint -> PASS (0 warnings)
+- npm run typecheck -> PASS (0)
+- npm run test:unit -> PASS (12/12 files, 43/43 tests)
+- npm run test:integration -> PASS (9/9 files, 42/42 tests, including new TASK-0012 p0b1 VALIDATION_FAILED + details.field test)
+- npm run build -> PASS (0)
+- npm run env:test:seed -> PASS (3 synthetic departments, 13 synthetic accounts)
+- npm run test:e2e -> PASS (13/13 Playwright Chromium tests in 34.6s, including TASK-0012 security headers check: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, no X-Powered-By)
+- npm run security -> PASS (gitleaks 59 commits scanned, 0 leaks found)
+- npm audit --audit-level=high -> PASS (0 high/critical vulnerabilities)
+- git diff --check -> PASS (0)

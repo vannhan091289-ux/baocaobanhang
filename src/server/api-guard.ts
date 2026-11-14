@@ -1,9 +1,9 @@
 import "server-only";
-import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { recordDenyAuditSafely } from "./audit";
 import { getRuntimeConfig } from "./config";
+import { constantTimeEqual } from "./crypto";
 import { getRuntimePool } from "./db";
 import type { Actor, ServiceResult } from "./service-core";
 import {
@@ -33,12 +33,6 @@ function errorResponse(
     { error: { code, message, ...(details ? { details } : {}) } },
     { status, headers: { ...NO_STORE, ...extraHeaders } },
   );
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 async function denyAudit(
@@ -178,7 +172,7 @@ export async function handleApi(
         ? parsed.csrf_token
         : undefined;
     const submitted = headerCsrf ?? bodyCsrf;
-    if (!submitted || !safeEqual(submitted, actor.csrfToken)) {
+    if (!submitted || !constantTimeEqual(submitted, actor.csrfToken)) {
       await denyAudit(actor, action, opts.resourceType, "CSRF_INVALID");
       return errorResponse(
         403,

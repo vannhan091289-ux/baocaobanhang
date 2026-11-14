@@ -23,6 +23,7 @@ import {
   readPageParams,
   readString,
   validateQueryParams,
+  isValidIsoDate,
 } from "@/server/validation";
 import {
   KPI_PERIOD_TYPES,
@@ -162,12 +163,6 @@ function formatPgDate(val: unknown): string {
   return String(val).slice(0, 10);
 }
 
-function isValidIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const dt = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === value;
-}
-
 function readNullableActualNumber(
   value: unknown,
   field: string,
@@ -180,7 +175,7 @@ function readNullableActualNumber(
       ok: false,
       failure: fail(
         400,
-        "VALIDATION_ERROR",
+        "VALIDATION_FAILED",
         `${field} must be a finite number or null (MISSING_DATA)`,
       ),
     };
@@ -290,12 +285,12 @@ export async function listKpiActuals(
         tamperRejected("kpi.actual.read", "kpi_actual_record", qv.field),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
 
   const page = readPageParams(url.searchParams);
   if (!page.ok) {
-    return fail(400, "VALIDATION_ERROR", page.reason);
+    return fail(400, "VALIDATION_FAILED", page.reason);
   }
 
   const deptParam = url.searchParams.get("department_id") ?? undefined;
@@ -307,15 +302,15 @@ export async function listKpiActuals(
     url.searchParams.get("reconciliation_status") ?? undefined;
 
   if (deptParam && !isUuid(deptParam)) {
-    return fail(400, "VALIDATION_ERROR", "department_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "department_id must be a valid UUID");
   }
   if (staffParam && !isUuid(staffParam)) {
-    return fail(400, "VALIDATION_ERROR", "staff_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "staff_id must be a valid UUID");
   }
   if (defParam && !isUuid(defParam)) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "kpi_definition_id must be a valid UUID",
     );
   }
@@ -323,13 +318,13 @@ export async function listKpiActuals(
     periodTypeParam &&
     !KPI_PERIOD_TYPES.includes(periodTypeParam as KpiPeriodType)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid period_type");
+    return fail(400, "VALIDATION_FAILED", "Invalid period_type");
   }
   if (
     statusParam &&
     !RECONCILIATION_STATUSES.includes(statusParam as ReconciliationStatus)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid reconciliation_status");
+    return fail(400, "VALIDATION_FAILED", "Invalid reconciliation_status");
   }
 
   const denied = authorize(
@@ -453,7 +448,7 @@ export async function createKpiActual(
   body: unknown,
 ): Promise<ServiceResult<KpiActualRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "kpi_definition_id",
@@ -504,13 +499,13 @@ export async function createKpiActual(
     sourceRef,
     notes,
   ]) {
-    if (!r.ok) return fail(400, "VALIDATION_ERROR", r.reason);
+    if (!r.ok) return fail(400, "VALIDATION_FAILED", r.reason);
   }
 
   if (!defId.ok || !defId.value || !isUuid(defId.value)) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "kpi_definition_id must be a valid UUID",
     );
   }
@@ -521,7 +516,7 @@ export async function createKpiActual(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "primary_staff_id must be a valid UUID",
     );
   }
@@ -532,14 +527,14 @@ export async function createKpiActual(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "referrer_staff_id must be a valid UUID",
     );
   }
   if (referrerStaffId.ok && referrerStaffId.value === primaryStaffId.value) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "referrer_staff_id cannot equal primary_staff_id",
     );
   }
@@ -548,17 +543,17 @@ export async function createKpiActual(
     !periodType.value ||
     !KPI_PERIOD_TYPES.includes(periodType.value as KpiPeriodType)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid period_type");
+    return fail(400, "VALIDATION_FAILED", "Invalid period_type");
   }
   if (!asOfDate.ok || !asOfDate.value || !isValidIsoDate(asOfDate.value)) {
-    return fail(400, "VALIDATION_ERROR", "as_of_date must be YYYY-MM-DD");
+    return fail(400, "VALIDATION_FAILED", "as_of_date must be YYYY-MM-DD");
   }
   if (
     !periodKey.ok ||
     !periodKey.value ||
     !resolvePeriodDateRange(periodType.value as KpiPeriodType, periodKey.value)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid period_key for period_type");
+    return fail(400, "VALIDATION_FAILED", "Invalid period_key for period_type");
   }
 
   const valCheck = readNullableActualNumber(body.actual_value, "actual_value");
@@ -691,7 +686,7 @@ export async function patchKpiActual(
   body: unknown,
 ): Promise<ServiceResult<KpiActualRow>> {
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "id",
@@ -709,11 +704,11 @@ export async function patchKpiActual(
 
   const idCheck = readString(body, "id", { max: 64 });
   if (!idCheck.ok || !idCheck.value || !isUuid(idCheck.value)) {
-    return fail(400, "VALIDATION_ERROR", "id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "id must be a valid UUID");
   }
   const expectedVer = readExpectedVersion(body);
   if (!expectedVer.ok) {
-    return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
   }
 
   const valCheck =
@@ -723,12 +718,12 @@ export async function patchKpiActual(
   if (valCheck && !valCheck.ok) return valCheck.failure;
 
   const notes = readString(body, "notes", { max: 500, optional: true });
-  if (!notes.ok) return fail(400, "VALIDATION_ERROR", notes.reason);
+  if (!notes.ok) return fail(400, "VALIDATION_FAILED", notes.reason);
   const sourceRef = readString(body, "source_ref", {
     max: 160,
     optional: true,
   });
-  if (!sourceRef.ok) return fail(400, "VALIDATION_ERROR", sourceRef.reason);
+  if (!sourceRef.ok) return fail(400, "VALIDATION_FAILED", sourceRef.reason);
 
   const recordId = idCheck.value;
 
@@ -826,10 +821,10 @@ export async function reconcileKpiActual(
   body: unknown,
 ): Promise<ServiceResult<KpiActualRow>> {
   if (!isUuid(actualId)) {
-    return fail(400, "VALIDATION_ERROR", "actualId must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "actualId must be a valid UUID");
   }
   if (!isPlainObject(body)) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be a JSON object");
+    return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
   const tamperKey = findDisallowedTamperKey(Object.keys(body), [
     "reconcile_action",
@@ -850,7 +845,7 @@ export async function reconcileKpiActual(
   if (!actionCheck.ok || !actionCheck.value) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       actionCheck.ok ? "reconcile_action is required" : actionCheck.reason,
     );
   }
@@ -862,28 +857,29 @@ export async function reconcileKpiActual(
   ) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "reconcile_action must be RECONCILE, FINALIZE, or ADJUST_FINAL",
     );
   }
 
   const expectedVer = readExpectedVersion(body);
   if (!expectedVer.ok) {
-    return fail(400, "VALIDATION_ERROR", expectedVer.reason);
+    return fail(400, "VALIDATION_FAILED", expectedVer.reason);
   }
 
   const reasonCheck = readString(body, "adjustment_reason", {
     max: 500,
     optional: reconcileAction !== "ADJUST_FINAL",
   });
-  if (!reasonCheck.ok) return fail(400, "VALIDATION_ERROR", reasonCheck.reason);
+  if (!reasonCheck.ok)
+    return fail(400, "VALIDATION_FAILED", reasonCheck.reason);
 
   const sourceRefCheck = readString(body, "source_ref", {
     max: 160,
     optional: true,
   });
   if (!sourceRefCheck.ok) {
-    return fail(400, "VALIDATION_ERROR", sourceRefCheck.reason);
+    return fail(400, "VALIDATION_FAILED", sourceRefCheck.reason);
   }
 
   const approverCheck = readString(body, "approved_by_staff_id", {
@@ -891,12 +887,12 @@ export async function reconcileKpiActual(
     optional: reconcileAction !== "ADJUST_FINAL",
   });
   if (!approverCheck.ok) {
-    return fail(400, "VALIDATION_ERROR", approverCheck.reason);
+    return fail(400, "VALIDATION_FAILED", approverCheck.reason);
   }
   if (approverCheck.value && !isUuid(approverCheck.value)) {
     return fail(
       400,
-      "VALIDATION_ERROR",
+      "VALIDATION_FAILED",
       "approved_by_staff_id must be a valid UUID",
     );
   }
@@ -1015,7 +1011,7 @@ export async function reconcileKpiActual(
       if (!approverIdVal || !reasonVal) {
         return abort(
           400,
-          "VALIDATION_ERROR",
+          "VALIDATION_FAILED",
           "approved_by_staff_id and adjustment_reason are required",
         );
       }
@@ -1123,18 +1119,18 @@ export async function getDashboardOverview(
         ),
       );
     }
-    return fail(400, "VALIDATION_ERROR", qv.reason);
+    return fail(400, "VALIDATION_FAILED", qv.reason);
   }
 
   const periodTypeRaw = url.searchParams.get("period_type") ?? "MONTH";
   if (!KPI_PERIOD_TYPES.includes(periodTypeRaw as KpiPeriodType)) {
-    return fail(400, "VALIDATION_ERROR", "Invalid period_type");
+    return fail(400, "VALIDATION_FAILED", "Invalid period_type");
   }
   const periodType = periodTypeRaw as KpiPeriodType;
 
   const asOfDate = url.searchParams.get("as_of_date") ?? getCurrentVnDate();
   if (!isValidIsoDate(asOfDate)) {
-    return fail(400, "VALIDATION_ERROR", "as_of_date must be YYYY-MM-DD");
+    return fail(400, "VALIDATION_FAILED", "as_of_date must be YYYY-MM-DD");
   }
 
   const periodKey =
@@ -1142,12 +1138,12 @@ export async function getDashboardOverview(
     getDefaultPeriodKey(periodType, asOfDate);
   const dateRange = resolvePeriodDateRange(periodType, periodKey);
   if (!dateRange) {
-    return fail(400, "VALIDATION_ERROR", "Invalid period_key for period_type");
+    return fail(400, "VALIDATION_FAILED", "Invalid period_key for period_type");
   }
 
   const deptParam = url.searchParams.get("department_id") ?? undefined;
   if (deptParam && !isUuid(deptParam)) {
-    return fail(400, "VALIDATION_ERROR", "department_id must be a valid UUID");
+    return fail(400, "VALIDATION_FAILED", "department_id must be a valid UUID");
   }
 
   const groupParam = url.searchParams.get("group_code") ?? undefined;
@@ -1155,7 +1151,7 @@ export async function getDashboardOverview(
     groupParam &&
     !ALL_SEVEN_KPI_GROUPS.includes(groupParam as KpiGroupCode)
   ) {
-    return fail(400, "VALIDATION_ERROR", "Invalid group_code");
+    return fail(400, "VALIDATION_FAILED", "Invalid group_code");
   }
 
   const denied = authorize(
