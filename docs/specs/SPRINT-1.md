@@ -17,11 +17,11 @@ Một người dùng được xác thực qua IdP đã được chủ dự án/I
 
 ### 1.2 Phân tách trạng thái thông tin
 
-- **Facts (Sự thật hiện có trên repo tại `main` `b04b69d1c63ae9f0a9aa525944c15056efe76ef0`):**
+1. **Facts (Sự thật hiện có trên repo tại `main` `d8a7bd9c4b8bbebb738dd84f7369a9446e46b2dc`):**
   - Scaffold kỹ thuật và bộ cổng kiểm tra chất lượng/bảo mật của Sprint 0 (`TASK-0001`) đã `ACCEPTED` và hợp nhất qua [PR #3](https://github.com/vannhan091289-ux/baocaobanhang/pull/3).
-  - Mã nguồn ứng dụng hiện tại chỉ gồm `src/app/layout.tsx`, `src/app/page.tsx` và `src/app/globals.css` hiển thị trạng thái tĩnh trung tính.
-  - Chưa có mã nguồn xác thực/SSO, quản lý phiên, cơ sở dữ liệu, ORM, schema, migration, danh mục phòng/nhân viên hay kiểm tra quyền RBAC tại runtime.
-  - Chính sách nội bộ của tổ chức về IdP, tiêu chuẩn phiên đăng nhập, phân loại dữ liệu và hạ tầng lưu trữ **chưa được cung cấp** trong repository.
+  - Slice `S1-A` (`TASK-0003`: xác thực Keycloak OIDC + PKCE S256, phiên server-side, 7 bảng nền PostgreSQL 18.7, least-privilege `app_runtime_role`, `/api/me`, `/workspace` và thu hồi phiên nguyên tử qua migrations `0001`+`0002`) đã được nghiệm thu `ACCEPTED` và hợp nhất qua [PR #6](https://github.com/vannhan091289-ux/baocaobanhang/pull/6).
+  - Chưa mở các endpoints CRUD danh mục tổ chức (`S1-B`) và luồng đề nghị/phê duyệt phân quyền Maker-Checker (`S1-B`/`S1-C`); gói đặc tả chi tiết và đề xuất migration `0003` đã được soạn tại [tasks/TASK-0004.md](../../tasks/TASK-0004.md), [tasks/TASK-0005.md](../../tasks/TASK-0005.md) và [docs/decisions/SPRINT-1-BC-PROPOSAL.md](../decisions/SPRINT-1-BC-PROPOSAL.md) để trình duyệt chuyển sang `READY`.
+  - Chính sách nội bộ của tổ chức về IdP thật, tiêu chuẩn phiên đăng nhập vận hành thật, phân loại dữ liệu và hạ tầng lưu trữ thật (`D-05`, `D-10`) **chưa được cung cấp** trong repository.
 - **Proposals (Đề xuất trong tài liệu này — `DRAFT` / `PROPOSED`):**
   - Mô hình thực thể tối thiểu (`Department`, `Staff`, `IdentityLink`, `RoleAssignment`, `AuditEvent`), luồng nghiệp vụ nền tảng (`S1-A`, `S1-B`, `S1-C`), hai phương án cho `D-08` và hai phương án cho `D-09`.
   - Quy tắc kiểm tra quyền mặc định từ chối (`default-deny`) và ma trận quyền chi tiết được đặt duy nhất tại [ADR-002](../adr/ADR-002-authorization.md) (`ACCEPTED`, Scope: DEVTEST).
@@ -172,6 +172,6 @@ Các slices dưới giữ trình tự giảm rủi ro: S1-A được duyệt ri�
 
 ## 7. Quyết định đã duyệt và bước tiếp theo
 
-Chủ dự án duyệt D-08 B / D-09 A / ADR-002 v0.3 / S1-A vào 2026-11-13; nguyên văn/reference tại [approval package](../decisions/SPRINT-1-APPROVAL.md) mục 6. TASK-0003 là slice thực thi đầu tiên sau READY trên main và preflight runtime PASS; không Org CRUD, dữ liệu thật, enterprise SSO hoặc deploy. Trên máy chưa có runtime được phép, Antigravity chỉ báo BLOCKED; không tự cài global/đổi dịch vụ/mock integration.
+Chủ dự án đã duyệt D-08 B / D-09 A / ADR-002 v0.3 / S1-A vào 2026-11-13; nguyên văn/reference tại [approval package](../decisions/SPRINT-1-APPROVAL.md) mục 6. [TASK-0003](../../tasks/TASK-0003.md) (`S1-A`) đã được triển khai, kiểm chứng toàn bộ `AC-01`..`AC-10` trên Colima ARM64 local và GitHub Actions CI (`linux/amd64`), được nghiệm thu `ACCEPTED` và hợp nhất vào `main` qua [PR #6](https://github.com/vannhan091289-ux/baocaobanhang/pull/6) tại SHA `d8a7bd9c4b8bbebb738dd84f7369a9446e46b2dc`.
 
-S1-B/C vẫn cần task/approval riêng sau nghiệm thu slice trước. Không đóng D-01..D-05/D-07/D-10. Toàn bộ AC implementation TASK-0003 hiện NOT RUN; metadata/CI baseline không thay bằng chứng OIDC/database thật.
+Đối với `S1-B` và `S1-C`: gói đặc tả chi tiết [tasks/TASK-0004.md](../../tasks/TASK-0004.md) (`S1-B`), [tasks/TASK-0005.md](../../tasks/TASK-0005.md) (`S1-C`) và đề xuất schema migration `0003` kèm gói phương án `P0A`..`P0D` đã được hoàn thiện tại [docs/decisions/SPRINT-1-BC-PROPOSAL.md](../decisions/SPRINT-1-BC-PROPOSAL.md) ở trạng thái `REVIEWED` / `PROPOSED`. Ngay khi Chủ dự án phê duyệt gói đề xuất này và chuyển `TASK-0004` sang `READY`, Antigravity sẽ triển khai `S1-B` (và tiếp nối `S1-C` sau nghiệm thu `S1-B`). Không tự đóng `D-01`..`D-05`, `D-07`, `D-10` khi chưa có phê duyệt.

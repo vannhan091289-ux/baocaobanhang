@@ -22,9 +22,11 @@ Chủ dự án đã chọn trực tiếp: “Chuẩn bị đặc tả Sprint 1 v
 - [docs/adr/ADR-002-authorization.md](adr/ADR-002-authorization.md) (`ACCEPTED` v0.3, Scope: DEVTEST) là nguồn chuẩn duy nhất cho mô hình phân quyền `role + action + resource + scope + effective_time`, nguyên tắc `default-deny`, tách biệt quyền `CONFIG_ADMIN` (không mặc nhiên xem dữ liệu KH, cấm tự nâng quyền), các kịch bản từ chối bắt buộc và quy tắc kiểm toán (`AuditEvent`).
 - Nghiệm thu TASK-0002 trước đây không tự duyệt implementation. Phê duyệt mới của chủ dự án được ghi riêng bên dưới; lượt kích hoạt này chỉ thay tài liệu, chưa code/database/deploy.
 
-## D-08 / D-09 / ADR-002 — phê duyệt 2026-11-13; chưa implementation
+## D-08 / D-09 / ADR-002 — phê duyệt 2026-11-13; S1-A đã ACCEPTED (PR #6), đề xuất mở khóa S1-B/S1-C & P0A..P0D
 
-Chủ dự án duyệt D-08 B, D-09 A, ADR-002 v0.3 và phạm vi S1-A; cho phép chốt digests, READY, review và merge PR #5, chưa code/deploy. [Gói phê duyệt](decisions/SPRINT-1-APPROVAL.md) v1.0 mục 6 là bản ghi owner/date/version/nguyên văn/reference; không phải chính sách ngân hàng hoặc quyền production. [Image manifest](decisions/SPRINT-1-IMAGES.md) là nguồn chuẩn digest theo platform. [TASK-0003](../tasks/TASK-0003.md) READY về spec/approval sau merge, nhưng execution phải BLOCKED nếu môi trường chưa có runtime/daemon được phép (báo cáo Antigravity hiện thiếu runtime). Không cài global hoặc tự chuyển dịch vụ. D-05/D-10 vẫn OPEN, S1-B/C cần task riêng sau nghiệm thu S1-A.
+Chủ dự án duyệt D-08 B, D-09 A, ADR-002 v0.3 và phạm vi S1-A; [Gói phê duyệt](decisions/SPRINT-1-APPROVAL.md) v1.0 mục 6 là bản ghi owner/date/version/nguyên văn/reference; không phải chính sách ngân hàng hoặc quyền production. [Image manifest](decisions/SPRINT-1-IMAGES.md) là nguồn chuẩn digest theo platform. [TASK-0003](../tasks/TASK-0003.md) (`S1-A`) đã được triển khai, kiểm chứng toàn bộ `AC-01`..`AC-10`, được nghiệm thu `ACCEPTED` và hợp nhất qua [PR #6](https://github.com/vannhan091289-ux/baocaobanhang/pull/6) tại `main` SHA `d8a7bd9c4b8bbebb738dd84f7369a9446e46b2dc`.
+
+Để mở khóa `S1-B` ([TASK-0004](../tasks/TASK-0004.md)) và `S1-C` ([TASK-0005](../tasks/TASK-0005.md)) cùng lộ trình `P0A`..`P0D`, đề xuất chi tiết về contracts, AC, additive migration `0003_s1b_org_and_role_workflow.sql` và phương án cho các quyết định `D-01`..`D-04`, `D-07`, `ADR-003`..`005` được trình tại [docs/decisions/SPRINT-1-BC-PROPOSAL.md](decisions/SPRINT-1-BC-PROPOSAL.md) (trạng thái `PROPOSED` / `REVIEWED`). D-05/D-10 vẫn OPEN; chưa viết code `S1-B`/`S1-C` trước khi `TASK-0004` được chuyển sang `READY`.
 
 ## D-06 — quyết định ngày 2026-11-11, version 1.0
 
