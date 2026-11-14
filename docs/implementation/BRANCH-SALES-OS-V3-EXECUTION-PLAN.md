@@ -38,7 +38,7 @@ Only parallelize non-overlapping ownership; serialize shared schema/API contract
 | 7 | TASK-0010 | P0D: Synthetic Customer 360 and drilldown | TASK-0008 and TASK-0009 ACCEPTED and merged | Customer reference only, no PII, CONFIG_ADMIN deny, multi-level scoped navigation |
 | 8 | TASK-0011 | Complete multi-role UAT/security/hardening/handover | TASK-0004..0010 all ACCEPTED and merged | Final 5-menu synthetic E2E, clean CI, negative tests, backup/restore, evidence matrix |
 
-All task files are advance-approved READY for owner-policy purposes; **READY is not permission to disregard dependency gate**. Do not execute future task before its predecessors are ACCEPTED on main. If a prerequisite fails, repair it first while completing unrelated approved work.
+TASK-0004 is READY; TASK-0005..0011 remain REVIEWED with advance owner approval. Coordinator changes each subsequent task to READY only after prerequisites are ACCEPTED and merged; owner approval is not to be requested again for these DEVTEST tasks. Do not execute future task before its predecessors are ACCEPTED on main. If a prerequisite fails, repair it first while completing unrelated approved work.
 
 ## One-cycle execution loop — repeat until all gates green
 
