@@ -43,7 +43,10 @@ export type PolicyAction =
   | "alerts.read"
   | "alerts.evaluate"
   | "alerts.read_mark"
-  | "alerts.resolve";
+  | "alerts.resolve"
+  | "customer360.read"
+  | "customer360.write"
+  | "dashboard.drilldown.read";
 
 export interface DepartmentRecord {
   id: string;
@@ -824,6 +827,62 @@ export function evaluateActionAuthorization(
       };
     }
 
+    if (role === "STAFF") {
+      if (targetStaffId && targetStaffId !== actorStaffId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_STAFF_SELF_SCOPE_DENIED",
+        };
+      }
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_SELF_SCOPE",
+      };
+    }
+  }
+
+  if (
+    action === "customer360.read" ||
+    action === "customer360.write" ||
+    action === "dashboard.drilldown.read"
+  ) {
+    if (role === "CONFIG_ADMIN") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "CONFIG_ADMIN_CUSTOMER_KPI_FORBIDDEN",
+      };
+    }
+    if (role === "EXECUTIVE") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_BRANCH_SCOPE",
+      };
+    }
+    if (role === "DEPARTMENT_MANAGER") {
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_DEPARTMENT_SCOPE",
+      };
+    }
     if (role === "STAFF") {
       if (targetStaffId && targetStaffId !== actorStaffId) {
         return {

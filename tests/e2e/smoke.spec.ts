@@ -708,4 +708,73 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await staffContext.close();
     }
   });
+
+  test("P0D AC-05: Customer 360 & milestones UI enforces RBAC and renders scoped bundle cleanly", async ({
+    browser,
+  }) => {
+    const adminContext = await browser.newContext();
+    const staffContext = await browser.newContext();
+    const adminPage = await adminContext.newPage();
+    const staffPage = await staffContext.newPage();
+
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    for (const p of [adminPage, staffPage]) {
+      p.on("console", (msg) => {
+        if (msg.type() === "error") consoleErrors.push(msg.text());
+      });
+      p.on("pageerror", (err) => pageErrors.push(err.message));
+    }
+
+    try {
+      const password = getSyntheticPassword();
+      await adminPage.goto("/auth/login");
+      await adminPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await adminPage.locator("#username").fill("syn.admin01");
+      await adminPage.locator("#password").fill(password);
+      await adminPage.locator("#kc-login").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await adminPage.getByTestId("nav-customers").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/customers");
+      await expect(adminPage.getByTestId("customers-denied-box")).toBeVisible();
+
+      await staffPage.goto("/auth/login");
+      await staffPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await staffPage.locator("#username").fill("syn.staff.khcn");
+      await staffPage.locator("#password").fill(password);
+      await staffPage.locator("#kc-login").click();
+      await staffPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await staffPage.getByTestId("nav-customers").click();
+      await staffPage.waitForURL("http://127.0.0.1:3100/workspace/customers");
+
+      const custRef = `SYN-CIF-E2E-${Date.now()}`;
+      await staffPage.getByTestId("input-customer-ref").fill(custRef);
+      await staffPage
+        .getByTestId("input-customer-name")
+        .fill("KH Synthetic E2E 360");
+      await staffPage.getByTestId("submit-create-customer").click();
+      await expect(staffPage.getByTestId("customers-status")).toContainText(
+        "Đã tạo Khách hàng synthetic thành công.",
+      );
+
+      await staffPage.getByTestId(`link-customer-360-${custRef}`).click();
+      await expect(staffPage.getByTestId("customer360-bundle")).toBeVisible();
+
+      await staffPage
+        .getByTestId("input-milestone-title")
+        .fill("Nhắc đáo hạn E2E");
+      await staffPage.getByTestId("submit-create-milestone").click();
+      await expect(staffPage.getByTestId("cust360-status")).toContainText(
+        "Đã thêm mốc tái cấp/đáo hạn thành công.",
+      );
+
+      expect(consoleErrors).toEqual([]);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await adminContext.close();
+      await staffContext.close();
+    }
+  });
 });

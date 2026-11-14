@@ -674,6 +674,40 @@ export async function evaluateP0Alerts(
           summary: `Cơ hội sắp tới hạn tái cấp/chốt trong ${Math.floor(careRule.threshold_value)} ngày.`,
         });
       }
+
+      const careMilestones = await client.query(
+        `SELECT m.id, m.milestone_type, m.due_date, m.title,
+                cr.customer_ref_code, cr.managing_department_id, cr.assigned_staff_id
+         FROM customer_milestones m
+         JOIN customer_references cr ON cr.id = m.customer_reference_id
+         WHERE m.status = 'OPEN'
+           AND cr.status = 'ACTIVE'
+           AND m.due_date <= ($1::date + ($2::int * INTERVAL '1 day'))
+           AND ($3::uuid IS NULL OR cr.managing_department_id = $3)
+           AND ($4::uuid IS NULL OR cr.assigned_staff_id = $4)`,
+        [
+          asOfDate,
+          Math.floor(careRule.threshold_value),
+          scopeFilter.deptId,
+          scopeFilter.staffId,
+        ],
+      );
+      for (const row of careMilestones.rows) {
+        const tag =
+          row.milestone_type === "MATURITY"
+            ? "[CUSTOMER_MATURITY_UPCOMING] "
+            : "";
+        candidates.push({
+          rule_code: "CUSTOMER_RENEWAL_CARE",
+          dedup_key: `CUSTOMER_RENEWAL_CARE:MILESTONE:${row.id}`,
+          severity: careRule.severity,
+          target_scope: "SELF",
+          department_id: String(row.managing_department_id),
+          owner_staff_id: String(row.assigned_staff_id),
+          title: `${tag}Nhắc mốc ${row.milestone_type} KH ${row.customer_ref_code}: ${row.title}`,
+          summary: `Mốc ${row.milestone_type} đến hạn trong ${Math.floor(careRule.threshold_value)} ngày tính từ ${asOfDate}.`,
+        });
+      }
     }
 
     let createdCount = 0;

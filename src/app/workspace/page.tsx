@@ -187,6 +187,13 @@ export default async function WorkspacePage() {
           >
             Trung tâm Cảnh báo P0 (P0C)
           </Link>
+          <Link
+            className="scaffold-button"
+            href="/workspace/customers"
+            data-testid="nav-customers"
+          >
+            Customer 360 Synthetic (P0D)
+          </Link>
         </nav>
 
         <form action="/auth/logout" method="POST" className="logout-form">
