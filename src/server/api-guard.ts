@@ -11,7 +11,7 @@ import {
   SESSION_COOKIE_NAME,
   verifyRequestSession,
 } from "./session";
-import { findTamperKey, isPlainObject } from "./validation";
+import { findTamperHeader, findTamperKey, isPlainObject } from "./validation";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 const MAX_BODY_BYTES = 16 * 1024;
@@ -58,7 +58,7 @@ async function denyAudit(
   });
 }
 
-async function readRawSessionCookie(
+export async function readRawSessionCookie(
   request: Request,
 ): Promise<string | undefined> {
   const cookieHeader = request.headers.get("cookie");
@@ -129,7 +129,10 @@ export async function handleApi(
   const action = opts.mutating ? "authz.request.write" : "authz.request.read";
 
   const url = new URL(request.url);
-  if (findTamperKey(url.searchParams.keys())) {
+  if (
+    findTamperHeader(request.headers) ||
+    findTamperKey(url.searchParams.keys())
+  ) {
     await denyAudit(
       actor,
       action,

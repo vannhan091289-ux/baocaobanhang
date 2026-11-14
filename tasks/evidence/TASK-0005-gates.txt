@@ -1,0 +1,38 @@
+# Evidence Log — TASK-0005 (S1-C: Authorization Matrix, Temporal/Concurrency & Audit Completion)
+Date: 2026-11-14 (Asia/Ho_Chi_Minh)
+Branch: feat/TASK-0005-s1c-authz-audit-completion
+Base main SHA: 52843270e7d743d14c40ad287b748847b7097994
+Scope: DEVTEST (100% synthetic data; D-05 and D-10 remain OPEN)
+
+## 1. Quality & Security Gates (AC-08)
+- `npm run lint` (`eslint . --max-warnings=0`): PASS (exit 0)
+- `npm run format:check` (`prettier --check .`): PASS (exit 0)
+- `npm run typecheck` (`tsc --noEmit`): PASS (exit 0)
+- `npm run test:unit` (`vitest run`): PASS — 7 test files, 30 passed (30), exit 0
+  - Includes `tests/unit/s1c-authz-temporal-matrix.test.ts` (exhaustive `ADR-002` `Actor × Action × Resource × Scope` matrix, exact millisecond half-open `[effective_from, effective_to)` boundaries, sequential handover `Assignment A [t0, t1)` -> `Assignment B [t1, null)`, and header/query/body tamper detection).
+- `npm run test:integration` (`vitest run --config vitest.integration.config.ts` on PostgreSQL 18.7 & Keycloak 26.8.2): PASS — 3 test files, 27 passed (27), exit 0
+  - `tests/integration/s1c-authz-concurrency-audit.test.ts` (6 tests):
+    1. `AC-01`: Exhaustive HTTP Route Matrix Across All 15 Sprint 1 Endpoints & 9 Actor States (`EXECUTIVE`, `CONFIG_ADMIN`, `DEPARTMENT_MANAGER`, `STAFF`, `ANONYMOUS`, `UNMAPPED`, `INACTIVE`, `EXPIRED_ROLE`, `MULTI_ROLE`).
+    2. `AC-02`: Anti-Inference Search, Filter & Pagination (Zero Count Oracle Leakage — `total` and `items` for `DEPARTMENT_MANAGER` and `STAFF` are invariant to out-of-scope records matching `q`).
+    3. `AC-03`: Parameter Tampering, Header Spoofing (`x-role`, `x-staff-id`, `x-department-id`, `x-scope`), Query Parameter Duplication (`?status=ACTIVE&status=INACTIVE`), Unknown Query Params, and Forced Browsing with `DENY` `AuditEvent`.
+    4. `AC-04`: Real-DB Sequential Role Handover (`Assignment A [t0, t1)` -> `Assignment B [t1, t2)`) with `1ms` overlap rejection (`409 ROLE_ASSIGNMENT_INTERVAL_OVERLAP`) and exact `t1` session revocation (`403 ROLE_ASSIGNMENT_BOUND_MISMATCH`).
+    5. `AC-05`: Real PostgreSQL Concurrency & Race Condition Barriers (`Promise.all` concurrent `DEPARTMENT_MANAGER` approval + staff department transfer serialized via `lock_s1a_authority()`, concurrent dual proposal decisions with `409 VERSION_CONFLICT`, and in-flight write rejection during authority revocation).
+    6. `AC-06`: Audit Completeness, Full-Table Redaction Scan & Outage Rollback Across All 8 Write Endpoints (`Department` create/patch, `Staff` create/patch, `IdentityLink` create/patch, `RoleAssignmentProposal` create/decide).
+  - `tests/integration/s1a-integration.test.ts` (16 tests): PASS
+  - `tests/integration/s1b-org-role-integration.test.ts` (5 tests): PASS
+- `npm run build` (`next build`): PASS (exit 0)
+- `npm run test:e2e` (`playwright test` on Chromium): PASS — 6 passed (10.4s), exit 0
+  - Includes `AC-07`: Full multi-role E2E journey (`CONFIG_ADMIN` creates staff & role proposal -> `EXECUTIVE` approves -> new staff logs in via Keycloak -> `DEPARTMENT_MANAGER` scope isolation & role assignment history filter -> `CONFIG_ADMIN` deactivates staff -> immediate `403` session revocation on `/api/me`).
+- `npm run security` (`gitleaks git --no-banner --redact` v8.30.1 + `npm audit --audit-level=high`): PASS (0 leaks, 0 vulnerabilities, exit 0)
+- `git diff --check`: PASS (exit 0)
+
+## 2. Meaningful Break -> Fail -> Restore -> Pass Proof (AC-09)
+1. **Break:** Modified `findTamperHeader` in `src/server/validation.ts` to return `null` instead of detecting spoofed identity headers (`x-role`, `x-staff-id`, `x-department-id`, `x-scope`).
+2. **Fail:** Executed `vitest run --config vitest.config.ts tests/unit/s1c-authz-temporal-matrix.test.ts`:
+   - Result: Exit code `1` (`FAIL tests/unit/s1c-authz-temporal-matrix.test.ts > detects header spoofing, query parameter pollution, and context-sensitive tamper keys — AssertionError: expected null to be 'x-role'`).
+3. **Restore:** Restored `findTamperHeader` in `src/server/validation.ts`.
+4. **Pass:** Re-ran `vitest run --config vitest.config.ts tests/unit/s1c-authz-temporal-matrix.test.ts`:
+   - Result: Exit code `0` (`3 passed (3)`).
+
+## 3. Real Backup & Restore Verification (`pg_dump` / `pg_restore`, AC-09)
+- Executed real `pg_dump` / `pg_restore` into isolated synthetic database copy `s1a_restore_56b2f1d250bc47199bb1b031a54e17eb` during integration verification (`tests/integration/s1a-integration.test.ts` + `tests/integration/s1b-org-role-integration.test.ts`), verifying preservation of all 8 tables (`departments`, `staff`, `identity_links`, `role_assignments`, `role_assignment_proposals`, `sessions`, `oidc_auth_states`, `audit_events`), row counts, `row_version` values, and constraints without destructive down-migration or data deletion.

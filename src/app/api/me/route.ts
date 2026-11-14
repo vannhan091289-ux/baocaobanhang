@@ -1,5 +1,5 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { readRawSessionCookie } from "@/server/api-guard";
 import { recordDenyAuditSafely } from "@/server/audit";
 import { getRuntimeConfig } from "@/server/config";
 import { getRuntimePool } from "@/server/db";
@@ -9,6 +9,7 @@ import {
   SESSION_COOKIE_NAME,
   verifyRequestSession,
 } from "@/server/session";
+import { findTamperHeader, findTamperKey } from "@/server/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +31,7 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
 
-  const cookieStore = await cookies();
-  const rawSessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const rawSessionToken = await readRawSessionCookie(request);
   const sessionCheck = await verifyRequestSession({ rawSessionToken });
 
   if (!sessionCheck.authenticated) {
@@ -73,7 +73,12 @@ export async function GET(request: Request): Promise<Response> {
   const tamperedRole = url.searchParams.get("role");
   const tamperedScope = url.searchParams.get("scope");
 
-  if (tamperedRole !== null || tamperedScope !== null) {
+  if (
+    tamperedRole !== null ||
+    tamperedScope !== null ||
+    findTamperHeader(request.headers) !== null ||
+    findTamperKey(url.searchParams.keys()) !== null
+  ) {
     await recordDenyAuditSafely(getRuntimePool(), {
       actorStaffId: sessionCheck.selfContext.staff_id,
       actorSubjectRef: `staff:${sessionCheck.selfContext.staff_id}`,
