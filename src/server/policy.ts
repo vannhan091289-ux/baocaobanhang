@@ -23,7 +23,14 @@ export type PolicyAction =
   | "kpi.dictionary.write"
   | "kpi.target.read"
   | "kpi.target.write"
-  | "kpi.target.approve";
+  | "kpi.target.approve"
+  | "planning.plan.read"
+  | "planning.plan.write"
+  | "planning.activity.read"
+  | "planning.activity.write"
+  | "planning.review.read"
+  | "planning.review.write"
+  | "planning.directive.write";
 
 export interface DepartmentRecord {
   id: string;
@@ -528,6 +535,78 @@ export function evaluateActionAuthorization(
           role === "EXECUTIVE"
             ? "ALLOW_KPI_TARGET_APPROVE_BRANCH"
             : "ALLOW_KPI_TARGET_APPROVE_DEPARTMENT",
+      };
+    }
+
+    if (role === "EXECUTIVE") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_BRANCH_SCOPE",
+      };
+    }
+
+    if (role === "DEPARTMENT_MANAGER") {
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_DEPARTMENT_SCOPE",
+      };
+    }
+
+    if (role === "STAFF") {
+      if (targetStaffId && targetStaffId !== actorStaffId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_STAFF_SELF_SCOPE_DENIED",
+        };
+      }
+      if (targetDepartmentId && targetDepartmentId !== actorDeptId) {
+        return {
+          decision: "DENY",
+          httpStatus: 404,
+          reasonCode: "CROSS_DEPARTMENT_DENIED",
+        };
+      }
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_SELF_SCOPE",
+      };
+    }
+  }
+
+  // P0B-1: Weekly/Daily Sales Plans, Single-Source Activity Log & Monday Review
+  if (
+    action === "planning.plan.read" ||
+    action === "planning.plan.write" ||
+    action === "planning.activity.read" ||
+    action === "planning.activity.write" ||
+    action === "planning.review.read" ||
+    action === "planning.review.write" ||
+    action === "planning.directive.write"
+  ) {
+    if (role === "CONFIG_ADMIN") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
+      };
+    }
+
+    if (action === "planning.review.write" && role === "STAFF") {
+      return {
+        decision: "DENY",
+        httpStatus: 403,
+        reasonCode: "STAFF_MONDAY_REVIEW_WRITE_FORBIDDEN",
       };
     }
 

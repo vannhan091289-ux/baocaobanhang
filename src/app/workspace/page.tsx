@@ -159,6 +159,13 @@ export default async function WorkspacePage() {
           >
             Mở Từ điển 7 Nhóm KPI &amp; Chỉ tiêu (P0A)
           </Link>
+          <Link
+            className="scaffold-button"
+            href="/workspace/planning"
+            data-testid="nav-planning"
+          >
+            Kế hoạch Bán hàng &amp; Review Thứ Hai (P0B-1)
+          </Link>
         </nav>
 
         <form action="/auth/logout" method="POST" className="logout-form">
