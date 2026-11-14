@@ -166,6 +166,13 @@ export default async function WorkspacePage() {
           >
             Kế hoạch Bán hàng &amp; Review Thứ Hai (P0B-1)
           </Link>
+          <Link
+            className="scaffold-button"
+            href="/workspace/dashboard"
+            data-testid="nav-dashboard"
+          >
+            Dashboard Đa lớp &amp; Đối soát Actual (P0B-2)
+          </Link>
         </nav>
 
         <form action="/auth/logout" method="POST" className="logout-form">

@@ -1,0 +1,54 @@
+TASK-0008 (P0B-2) — Gate Evidence
+Branch: feat/TASK-0008-p0b2-actual-reconciliation-dashboard
+Base main SHA: b98c47809e4d0eda504fe70ddd79ee2459de661e
+Date: 2026-11-14
+
+1. Database Migration
+- Command: npm run db:migrate:up
+- Target: 127.0.0.1:55432/branch_sales_devtest (PostgreSQL 18.7)
+- Applied: migrations/0006_p0b2_kpi_actuals_and_reconciliation.sql (exit 0)
+
+2. Format Check
+- Command: npm run format:check
+- Result: PASS (exit 0)
+
+3. Lint
+- Command: npm run lint
+- Result: PASS (exit 0)
+
+4. Typecheck
+- Command: npm run typecheck
+- Result: PASS (exit 0)
+
+5. Unit Tests
+- Command: npm run test:unit
+- Result: PASS — 10/10 files, 39/39 tests (exit 0)
+  Includes tests/unit/p0b2-aggregation-policy.test.ts (5/5)
+
+6. Integration Tests
+- Command: npm run test:integration
+- Result: PASS — 6/6 files, 35/35 tests (exit 0)
+  Includes tests/integration/p0b2-actual-dashboard-integration.test.ts (2/2) + s1a-integration pg_dump/pg_restore
+
+7. Production Build
+- Command: npm run build
+- Result: PASS (exit 0)
+
+8. E2E Tests (Playwright Chromium)
+- Command: npm run test:e2e
+- Result: PASS — 9/9 tests (21.5s, exit 0)
+  Includes P0B-2 AC-06 (/workspace/dashboard, 7 groups, zero console/page errors, CONFIG_ADMIN denial)
+
+9. Security & Diff Hygiene
+- Command: npm run security
+- Result: PASS — gitleaks v8.30.1 (50 commits, 0 leaks) + npm audit --audit-level=high (0 critical/high, exit 0)
+- Command: git diff --check
+- Result: PASS (exit 0)
+
+10. Break -> Fail -> Restore -> Pass Proof
+- Mutation: src/server/kpi/aggregation.ts line 57 temporarily changed to `if (false && actualValue === null)`
+- Break Run: ./node_modules/.bin/vitest run tests/unit/p0b2-aggregation-policy.test.ts
+- Break Result: FAIL (exit 1) — expected MISSING_DATA/null, received OK/0
+- Restore: src/server/kpi/aggregation.ts line 57 restored to `if (actualValue === null)`
+- Restore Run: ./node_modules/.bin/vitest run tests/unit/p0b2-aggregation-policy.test.ts
+- Restore Result: PASS (exit 0) — 1/1 file, 5/5 tests passed

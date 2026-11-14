@@ -585,4 +585,60 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await staffContext.close();
     }
   });
+
+  test("P0B-2 AC-06: EXECUTIVE views 7-group dashboard & records actual while CONFIG_ADMIN is denied without console errors", async ({
+    browser,
+  }) => {
+    const password = getSyntheticPassword();
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    const adminContext = await browser.newContext();
+    const execContext = await browser.newContext();
+    const adminPage = await adminContext.newPage();
+    const execPage = await execContext.newPage();
+
+    for (const p of [adminPage, execPage]) {
+      p.on("console", (msg) => {
+        if (msg.type() === "error") consoleErrors.push(msg.text());
+      });
+      p.on("pageerror", (err) => pageErrors.push(String(err)));
+    }
+
+    try {
+      // 1. CONFIG_ADMIN sees explicit 403 denial box on /workspace/dashboard with zero console errors
+      await adminPage.goto("/auth/login");
+      await adminPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await adminPage.locator("#username").fill("syn.admin01");
+      await adminPage.locator("#password").fill(password);
+      await adminPage.locator("#kc-login").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await adminPage.getByTestId("nav-dashboard").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/dashboard");
+      await expect(adminPage.getByTestId("dashboard-denied-box")).toContainText(
+        "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
+      );
+
+      // 2. EXECUTIVE opens /workspace/dashboard and sees 7 separate KPI groups
+      await execPage.goto("/auth/login");
+      await execPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await execPage.locator("#username").fill("syn.exec01");
+      await execPage.locator("#password").fill(password);
+      await execPage.locator("#kc-login").click();
+      await execPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await execPage.getByTestId("nav-dashboard").click();
+      await execPage.waitForURL("http://127.0.0.1:3100/workspace/dashboard");
+      const groupsEl = execPage.getByTestId("dashboard-groups");
+      await expect(groupsEl).toContainText("LOAN");
+      await expect(groupsEl).toContainText("INSURANCE");
+
+      expect(consoleErrors).toEqual([]);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await adminContext.close();
+      await execContext.close();
+    }
+  });
 });
