@@ -1,0 +1,24 @@
+TASK-0011 (UAT & Hardening Handover) Verification Evidence
+Branch: feat/TASK-0011-uat-hardening-handover
+Baseline main SHA: 27b97628384760e51c4f249782fe7fa5cfac5901 (PR #17 TASK-0010 merged)
+
+1. Local Quality & Security Gates (all exit 0):
+- npm run format:check -> PASS (0)
+- npm run lint -> PASS (0 warnings)
+- npm run typecheck -> PASS (0)
+- npm run test:unit -> PASS (12/12 files, 43/43 tests)
+- npm run test:integration -> PASS (9/9 files, 41/41 tests, including task0011-uat-hardening.test.ts 3/3)
+- npm run build -> PASS (0)
+- npm run env:test:seed -> PASS (3 synthetic departments, 13 synthetic accounts)
+- npm run test:e2e -> PASS (12/12 Playwright Chromium tests in 35.6s, 0 console/page errors)
+- npm run security -> PASS (gitleaks 56 commits scanned, 0 leaks found)
+- git diff --check -> PASS (0)
+
+2. Backup & Restore Roundtrip (AC-04):
+- pg_dump -U postgres -Fc -d branch_sales_devtest -> pg_restore into branch_sales_restore_verify
+- Verified 100% parity across all 27 public tables and 515 public constraints (audit_events: 3991, sessions: 1318, staff: 13, role_assignments: 14, kpi_targets: 11, kpi_target_revisions: 11, sales_plans: 8, activity_logs: 8, prospects: 5, pipeline_stage_transitions: 5, customer_references: 2, customer_milestones: 1, in_app_alerts: 1).
+- Dropped temporary verification database branch_sales_restore_verify.
+
+3. Break -> Fail -> Restore -> Pass Proof:
+- Mutated tests/integration/task0011-uat-hardening.test.ts (`rolsuper` check) -> BREAK_EXIT_CODE=1 (1 failed)
+- Restored tests/integration/task0011-uat-hardening.test.ts -> RESTORE_EXIT_CODE=0 (3/3 passed)
