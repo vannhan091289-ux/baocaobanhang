@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { SESSION_COOKIE_NAME, verifyRequestSession } from "@/server/session";
+import { OrgManagementPanel } from "./org-management-panel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -129,18 +130,24 @@ export default async function WorkspacePage() {
         </dl>
       </section>
 
+      <OrgManagementPanel
+        csrfToken={csrfToken}
+        actorStaffId={selfContext.staff_id}
+        actorRoleCode={selfContext.effective_role.role_code}
+        actorScopeType={selfContext.effective_role.scope_type}
+      />
+
       <section
         className="scaffold-status"
         aria-labelledby="module-empty-heading"
       >
         <h2 id="module-empty-heading">Trạng thái phân hệ nghiệp vụ</h2>
         <p>
-          Trong phạm vi <strong>TASK-0003 (S1-A)</strong>, hệ thống chỉ mở ngữ
-          cảnh cá nhân tối thiểu để xác nhận chuỗi định danh, phiên và phân
-          quyền nền tảng. Các phân hệ quản trị danh mục (<code>S1-B</code>), chỉ
-          tiêu KPI (<code>P0A</code>), kế hoạch &amp; kết quả bán hàng (
-          <code>P0B</code>), cơ hội bán hàng &amp; cảnh báo (<code>P0C</code>)
-          chưa được kích hoạt ở chặng này.
+          Hệ thống đã kích hoạt chuỗi định danh nền tảng (<code>S1-A</code>) và
+          quản trị danh mục Tổ chức, Nhân sự &amp; Quy trình phân quyền 2 bước (
+          <code>S1-B</code>). Các phân hệ chỉ tiêu KPI (<code>P0A</code>), kế
+          hoạch &amp; kết quả bán hàng (<code>P0B</code>), cơ hội bán hàng &amp;
+          cảnh báo (<code>P0C</code>) sẽ được mở theo lộ trình tiếp theo.
         </p>
 
         <form action="/auth/logout" method="POST" className="logout-form">

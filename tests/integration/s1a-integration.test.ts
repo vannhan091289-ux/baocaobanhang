@@ -98,6 +98,45 @@ async function performRealKeycloakBrowserFormLogin(
 
 beforeAll(async () => {
   migratorPool = new pg.Pool({ connectionString: migratorUrl, max: 5 });
+  if (process.env.SUPERUSER_DATABASE_URL) {
+    const admin = new pg.Client({
+      connectionString: process.env.SUPERUSER_DATABASE_URL,
+    });
+    await admin.connect();
+    try {
+      await admin.query(
+        "REVOKE TEMPORARY ON DATABASE branch_sales_devtest FROM PUBLIC, app_runtime_role",
+      );
+    } finally {
+      await admin.end();
+    }
+  }
+  // Clean up any leftover ephemeral S1-B/E2E test fixtures before verifying baseline 3-department state
+  const tempStaffSubquery = `SELECT id FROM staff WHERE staff_code LIKE 'SYN-S1B-%' OR staff_code LIKE 'SYN-E2E-%' OR department_id IN (SELECT id FROM departments WHERE code NOT IN ('KHCN', 'KHDN', 'DVKH'))`;
+  await migratorPool.query(
+    `DELETE FROM audit_events WHERE actor_staff_id IN (${tempStaffSubquery})`,
+  );
+  await migratorPool.query(
+    `DELETE FROM sessions WHERE staff_id IN (${tempStaffSubquery})`,
+  );
+  await migratorPool.query(
+    `UPDATE role_assignment_proposals SET applied_assignment_id = NULL WHERE target_staff_id IN (${tempStaffSubquery}) OR scope_department_id IN (SELECT id FROM departments WHERE code NOT IN ('KHCN', 'KHDN', 'DVKH'))`,
+  );
+  await migratorPool.query(
+    `DELETE FROM role_assignment_proposals WHERE target_staff_id IN (${tempStaffSubquery}) OR scope_department_id IN (SELECT id FROM departments WHERE code NOT IN ('KHCN', 'KHDN', 'DVKH'))`,
+  );
+  await migratorPool.query(
+    `DELETE FROM role_assignments WHERE staff_id IN (${tempStaffSubquery}) OR scope_department_id IN (SELECT id FROM departments WHERE code NOT IN ('KHCN', 'KHDN', 'DVKH'))`,
+  );
+  await migratorPool.query(
+    `DELETE FROM identity_links WHERE staff_id IN (${tempStaffSubquery})`,
+  );
+  await migratorPool.query(
+    `DELETE FROM staff WHERE id IN (${tempStaffSubquery})`,
+  );
+  await migratorPool.query(
+    `DELETE FROM departments WHERE code NOT IN ('KHCN', 'KHDN', 'DVKH')`,
+  );
 });
 
 afterAll(async () => {
@@ -1288,6 +1327,7 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
         "staff",
         "identity_links",
         "role_assignments",
+        "role_assignment_proposals",
         "sessions",
         "auth_transactions",
         "audit_events",
@@ -1333,6 +1373,7 @@ describe("AC-07: Audit Event Redaction & Error-Injection Failure Semantics", () 
               "staff",
               "identity_links",
               "role_assignments",
+              "role_assignment_proposals",
               "sessions",
               "auth_transactions",
               "audit_events",

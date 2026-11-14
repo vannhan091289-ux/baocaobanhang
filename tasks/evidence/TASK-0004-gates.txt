@@ -1,0 +1,36 @@
+# TASK-0004 (S1-B) Quality & Security Gates Evidence
+Date: 2026-11-14
+Branch: feat/TASK-0004-s1b-org-baseline
+Baseline main SHA: 1eb4c117791cdc81e1e82ac2496e8bfa081769a6
+Approval Reference: docs/decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md
+
+## 1. Runtime & Migration Gates (AC-01)
+- Colima profile: colima-baocaobanhang (linux/arm64, VZ, 2 CPU, 3 GiB RAM, 20 GiB disk)
+- Containers:
+  - baocaobanhang-s1a-postgres (PostgreSQL 18.7, 127.0.0.1:55432)
+  - baocaobanhang-s1a-keycloak (Keycloak 26.8.2, 127.0.0.1:8080)
+- `node scripts/devtest-env.mjs health` -> exit 0
+- `node scripts/migrate-s1a.mjs preview` -> exit 0 (17,417 bytes across 0001, 0002, 0003)
+- `node scripts/migrate-s1a.mjs up` -> exit 0 (applied 0002_revoke_changed_session_authority, 0003_s1b_org_and_role_workflow; idempotent re-run applies 0 migrations)
+- `node scripts/seed-s1a.mjs` -> exit 0 (3 synthetic departments KHCN, KHDN, DVKH and 13 synthetic Keycloak/DB fixtures)
+
+## 2. Static & Unit Gates (AC-02, AC-06, AC-09)
+- `npm run format:check` -> exit 0 (All matched files use Prettier code style)
+- `npm run lint` -> exit 0 (0 errors, 0 warnings)
+- `npm run typecheck` -> exit 0 (tsc --noEmit)
+- `npm run test:unit` -> exit 0 (6 test files, 27/27 tests passed)
+
+## 3. Real DB + Real Keycloak Integration Gates & Non-Destructive Backup/Restore (AC-01..AC-08, AC-10)
+- `npm run test:integration` -> exit 0 (2 test files: s1a-integration.test.ts 16/16 + s1b-org-role-integration.test.ts 5/5 = 21/21 tests passed)
+- Verified `SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh'` default timestamp drift < 2s (`0s` drift on all 11 TIMESTAMPTZ defaults).
+- Verified `pg_dump` / `pg_restore` into isolated synthetic database (`s1a_restore_9fd95962fcdf4d1b9d1ca319f0469dbb`) preserving all 8 tables (`departments`, `staff`, `identity_links`, `role_assignments`, `role_assignment_proposals`, `sessions`, `auth_transactions`, `audit_events`) and all CHECK/FK/UNIQUE constraints.
+
+## 4. Production Build & Playwright Chromium E2E Gates (AC-05, AC-09)
+- `npm run build` -> exit 0 (Next.js 16.4.6 production build)
+- `npm run test:e2e` -> exit 0 (5/5 Chromium E2E tests passed in 5.5s, including S1-B Maker-Checker UI workflow between syn.admin01 and syn.exec01 with 0 console/page errors)
+
+## 5. Security & Independent Challenger Review Gates (AC-09, AC-10)
+- `gitleaks git --no-banner --redact --log-opts=--all .` (v8.30.1) -> exit 0 (0 leaks across full git history)
+- `npm audit --audit-level=high` -> exit 0 (0 high/critical vulnerabilities)
+- `git diff --check` -> exit 0
+- Independent A5 Challenger & Security Review (`e32d35b9-22b7-4a72-9287-bec88783e5c8`) -> PASS (0 Critical, 0 High, 0 Medium, 0 Low findings)
