@@ -27,6 +27,7 @@ export const TAMPER_KEYS: readonly string[] = [
   "role_code_override",
   "scope",
   "scope_type",
+  "scope_department_id",
   "proposer_staff_id",
   "approver_staff_id",
   "actor_staff_id",
@@ -34,11 +35,111 @@ export const TAMPER_KEYS: readonly string[] = [
   "approval_reference",
 ];
 
+/** HTTP headers that clients must never supply to spoof identity, role, or scope. */
+export const HEADER_TAMPER_KEYS: readonly string[] = [
+  "x-role",
+  "x-role-code",
+  "x-scope",
+  "x-scope-type",
+  "x-staff-id",
+  "x-actor-staff-id",
+  "x-department-id",
+  "x-proposer-staff-id",
+  "x-approver-staff-id",
+];
+
+/** Identity/scope keys that become tamper attempts when sent on endpoints that do not accept them. */
+export const CONTEXT_SENSITIVE_TAMPER_KEYS: readonly string[] = [
+  ...TAMPER_KEYS,
+  "role_code",
+  "staff_id",
+  "department_id",
+  "target_staff_id",
+];
+
 export function findTamperKey(keys: Iterable<string>): string | null {
   for (const key of keys) {
     if (TAMPER_KEYS.includes(key.toLowerCase())) return key;
   }
   return null;
+}
+
+export function findTamperHeader(headers: Headers): string | null {
+  for (const key of HEADER_TAMPER_KEYS) {
+    if (headers.has(key)) return key;
+  }
+  return null;
+}
+
+export function findDisallowedTamperKey(
+  keys: Iterable<string>,
+  allowed: readonly string[],
+): string | null {
+  const allowedLower = new Set(allowed.map((k) => k.toLowerCase()));
+  for (const key of keys) {
+    const lower = key.toLowerCase();
+    if (TAMPER_KEYS.includes(lower)) return key;
+    if (
+      CONTEXT_SENSITIVE_TAMPER_KEYS.includes(lower) &&
+      !allowedLower.has(lower)
+    ) {
+      return key;
+    }
+  }
+  return null;
+}
+
+export type QueryParamValidation =
+  | { ok: true }
+  | {
+      ok: false;
+      kind: "TAMPER" | "VALIDATION";
+      field: string;
+      reason: string;
+    };
+
+export function validateQueryParams(
+  params: URLSearchParams,
+  allowed: readonly string[],
+): QueryParamValidation {
+  const tamper = findDisallowedTamperKey(params.keys(), allowed);
+  if (tamper) {
+    return {
+      ok: false,
+      kind: "TAMPER",
+      field: tamper,
+      reason: "CLIENT_ROLE_OR_SCOPE_TAMPER_REJECTED",
+    };
+  }
+  const seen = new Set<string>();
+  for (const key of params.keys()) {
+    if (seen.has(key)) {
+      return {
+        ok: false,
+        kind: "VALIDATION",
+        field: key,
+        reason: "DUPLICATE_QUERY_PARAM",
+      };
+    }
+    seen.add(key);
+    if (params.getAll(key).length > 1) {
+      return {
+        ok: false,
+        kind: "VALIDATION",
+        field: key,
+        reason: "DUPLICATE_QUERY_PARAM",
+      };
+    }
+    if (!allowed.includes(key)) {
+      return {
+        ok: false,
+        kind: "VALIDATION",
+        field: key,
+        reason: "UNKNOWN_QUERY_PARAM",
+      };
+    }
+  }
+  return { ok: true };
 }
 
 export function rejectUnknownKeys(

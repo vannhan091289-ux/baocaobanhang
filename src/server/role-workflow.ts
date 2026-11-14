@@ -9,13 +9,17 @@ import {
   authorize,
   fail,
   finalizeFailure,
+  notFound,
   runAuthorityTransaction,
   ServiceAbort,
+  tamperRejected,
   type Actor,
   type ServiceFailure,
   type ServiceResult,
 } from "./service-core";
 import {
+  escapeLike,
+  findDisallowedTamperKey,
   isPlainObject,
   isUuid,
   readExpectedVersion,
@@ -24,6 +28,7 @@ import {
   readString,
   readUuid,
   rejectUnknownKeys,
+  validateQueryParams,
 } from "./validation";
 
 export interface RoleAssignmentView {
@@ -86,6 +91,22 @@ function validationFailure(field: string, reason: string): ServiceFailure {
 /* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
 
+const ROLE_ASSIGNMENT_QUERY_KEYS = [
+  "q",
+  "status",
+  "department_id",
+  "staff_id",
+  "limit",
+  "offset",
+] as const;
+const PROPOSAL_QUERY_KEYS = [
+  "q",
+  "status",
+  "department_id",
+  "limit",
+  "offset",
+] as const;
+
 export async function listRoleAssignments(
   actor: Actor,
   params: URLSearchParams,
@@ -97,6 +118,16 @@ export async function listRoleAssignments(
     { type: "role_assignment", id: "list" },
   );
   if (denied) return finalizeFailure(actor, denied);
+  const qCheck = validateQueryParams(params, ROLE_ASSIGNMENT_QUERY_KEYS);
+  if (!qCheck.ok) {
+    if (qCheck.kind === "TAMPER") {
+      return finalizeFailure(
+        actor,
+        tamperRejected("authz.role.read", "role_assignment", "list"),
+      );
+    }
+    return validationFailure(qCheck.field, qCheck.reason);
+  }
   const page = readPageParams(params);
   if (!page.ok) return validationFailure(page.field, page.reason);
 
@@ -109,11 +140,59 @@ export async function listRoleAssignments(
   } else if (scope === "SELF") {
     values.push(actor.ctx.staff_id);
     clauses.push(`ra.staff_id = $${values.length}`);
+  } else {
+    clauses.push("TRUE");
   }
+
+  const departmentId = params.get("department_id");
+  if (departmentId !== null) {
+    if (!isUuid(departmentId)) {
+      return finalizeFailure(
+        actor,
+        notFound("department", "invalid-reference", "authz.role.read"),
+      );
+    }
+    if (
+      scope !== "BRANCH" &&
+      departmentId.toLowerCase() !== actor.ctx.department.id
+    ) {
+      return finalizeFailure(
+        actor,
+        notFound("department", departmentId.toLowerCase(), "authz.role.read"),
+      );
+    }
+    values.push(departmentId.toLowerCase());
+    clauses.push(`s.department_id = $${values.length}`);
+  }
+
   const staffId = params.get("staff_id");
   if (staffId !== null) {
-    if (!isUuid(staffId)) return validationFailure("staff_id", "INVALID_UUID");
-    values.push(staffId.toLowerCase());
+    if (!isUuid(staffId)) {
+      return finalizeFailure(
+        actor,
+        notFound("staff", "invalid-reference", "authz.role.read"),
+      );
+    }
+    const targetStaffId = staffId.toLowerCase();
+    if (scope === "SELF" && targetStaffId !== actor.ctx.staff_id) {
+      return finalizeFailure(
+        actor,
+        notFound("staff", targetStaffId, "authz.role.read"),
+      );
+    }
+    if (scope === "DEPARTMENT") {
+      const checkStaff = await db.query(
+        "SELECT 1 FROM staff WHERE id = $1 AND department_id = $2 LIMIT 1",
+        [targetStaffId, actor.ctx.department.id],
+      );
+      if (checkStaff.rowCount === 0) {
+        return finalizeFailure(
+          actor,
+          notFound("staff", targetStaffId, "authz.role.read"),
+        );
+      }
+    }
+    values.push(targetStaffId);
     clauses.push(`ra.staff_id = $${values.length}`);
   }
   const status = params.get("status");
@@ -124,7 +203,18 @@ export async function listRoleAssignments(
     values.push(status);
     clauses.push(`ra.status = $${values.length}`);
   }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const q = params.get("q");
+  if (q !== null) {
+    const text = q.trim();
+    if (text.length < 1 || text.length > 64) {
+      return validationFailure("q", "INVALID_LENGTH");
+    }
+    values.push(`%${escapeLike(text)}%`);
+    clauses.push(
+      `(s.staff_code ILIKE $${values.length} OR s.display_name ILIKE $${values.length} OR ra.role_code ILIKE $${values.length})`,
+    );
+  }
+  const where = `WHERE ${clauses.join(" AND ")}`;
   const total = await db.query<{ n: string }>(
     `SELECT count(*)::text AS n FROM role_assignments ra JOIN staff s ON s.id = ra.staff_id ${where}`,
     values,
@@ -169,10 +259,32 @@ export async function listProposals(
       ),
     );
   }
+  const qCheck = validateQueryParams(params, PROPOSAL_QUERY_KEYS);
+  if (!qCheck.ok) {
+    if (qCheck.kind === "TAMPER") {
+      return finalizeFailure(
+        actor,
+        tamperRejected("authz.role.read", "role_assignment_proposal", "list"),
+      );
+    }
+    return validationFailure(qCheck.field, qCheck.reason);
+  }
   const page = readPageParams(params);
   if (!page.ok) return validationFailure(page.field, page.reason);
-  const clauses: string[] = [];
+  const clauses: string[] = ["TRUE"];
   const values: unknown[] = [];
+
+  const departmentId = params.get("department_id");
+  if (departmentId !== null) {
+    if (!isUuid(departmentId)) {
+      return finalizeFailure(
+        actor,
+        notFound("department", "invalid-reference", "authz.role.read"),
+      );
+    }
+    values.push(departmentId.toLowerCase());
+    clauses.push(`s.department_id = $${values.length}`);
+  }
   const status = params.get("status");
   if (status !== null) {
     if (!["PENDING", "APPROVED", "REJECTED", "CANCELLED"].includes(status)) {
@@ -181,13 +293,28 @@ export async function listProposals(
     values.push(status);
     clauses.push(`p.status = $${values.length}`);
   }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const q = params.get("q");
+  if (q !== null) {
+    const text = q.trim();
+    if (text.length < 1 || text.length > 64) {
+      return validationFailure("q", "INVALID_LENGTH");
+    }
+    values.push(`%${escapeLike(text)}%`);
+    clauses.push(
+      `(s.staff_code ILIKE $${values.length} OR s.display_name ILIKE $${values.length} OR p.proposer_reason ILIKE $${values.length} OR p.role_code ILIKE $${values.length})`,
+    );
+  }
+  const where = `WHERE ${clauses.join(" AND ")}`;
   const total = await db.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM role_assignment_proposals p ${where}`,
+    `SELECT count(*)::text AS n
+       FROM role_assignment_proposals p
+       JOIN staff s ON s.id = p.target_staff_id ${where}`,
     values,
   );
   const rows = await db.query<ProposalView>(
-    `SELECT ${PROPOSAL_COLUMNS} FROM role_assignment_proposals p ${where}
+    `SELECT ${PROPOSAL_COLUMNS}
+       FROM role_assignment_proposals p
+       JOIN staff s ON s.id = p.target_staff_id ${where}
       ORDER BY p.created_at DESC, p.id LIMIT ${page.value.limit} OFFSET ${page.value.offset}`,
     values,
   );
@@ -233,6 +360,12 @@ export async function createProposal(
   body: unknown,
 ): Promise<ServiceResult<ProposalView>> {
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), PROPOSE_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected("authz.role.assign", "role_assignment_proposal", "new"),
+    );
+  }
   const unknown = rejectUnknownKeys(body, PROPOSE_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const targetStaffId = readUuid(body, "target_staff_id");
@@ -492,19 +625,44 @@ async function applyAssign(
       WHERE staff_id = $1 AND status = 'ACTIVE' FOR UPDATE`,
     [proposal.target_staff_id],
   );
+  const newFromMs = newFrom.getTime();
+  const newToMs = proposal.effective_to
+    ? proposal.effective_to.getTime()
+    : Number.POSITIVE_INFINITY;
   for (const old of existing.rows) {
-    const handover =
-      newFrom.getTime() > now.getTime() &&
-      old.effective_from.getTime() < newFrom.getTime();
-    if (handover) {
-      // Future start: old role stays valid until exactly newFrom (half-open, no gap, no overlap).
-      await client.query(
-        `UPDATE role_assignments
-            SET effective_to = CASE WHEN effective_to IS NULL OR effective_to > $2::timestamptz
-                                    THEN $2::timestamptz ELSE effective_to END
-          WHERE id = $1`,
-        [old.id, newFrom.toISOString()],
-      );
+    const oldFromMs = old.effective_from.getTime();
+    const oldToMs = old.effective_to
+      ? old.effective_to.getTime()
+      : Number.POSITIVE_INFINITY;
+
+    if (newFromMs > now.getTime()) {
+      // Future scheduled assignment:
+      // 1. If old is open-ended (effective_to IS NULL) and started before newFrom, clamp old.effective_to = newFrom (handover).
+      if (old.effective_to === null && oldFromMs < newFromMs) {
+        await client.query(
+          `UPDATE role_assignments SET effective_to = $2::timestamptz WHERE id = $1`,
+          [old.id, newFrom.toISOString()],
+        );
+        continue;
+      }
+      // 2. If old has a bounded window [oldFrom, oldTo) (or starts >= newFrom), any overlap >= 1ms is rejected.
+      if (oldFromMs < newToMs && newFromMs < oldToMs) {
+        abort(
+          409,
+          "ROLE_ASSIGNMENT_INTERVAL_OVERLAP",
+          "Khoảng hiệu lực đề nghị bị chồng lấn với một phân quyền đang hoạt động.",
+          {
+            denyAudit: {
+              action: "authz.role.assign",
+              resourceType: "role_assignment_proposal",
+              resourceId: proposal.id,
+              scopeContext: { reason: "ROLE_ASSIGNMENT_INTERVAL_OVERLAP" },
+              reasonCode: "ROLE_ASSIGNMENT_INTERVAL_OVERLAP",
+            },
+          },
+        );
+      }
+      // 3. Otherwise (e.g., oldToMs === newFromMs, exact boundary handover [t0, t1) -> [t1, t2)), keep old untouched.
     } else {
       await client.query(
         `UPDATE role_assignments
@@ -594,6 +752,16 @@ export async function decideProposal(
   );
   if (roleGate) return finalizeFailure(actor, roleGate);
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), DECISION_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected(
+        "authz.role.assign",
+        "role_assignment_proposal",
+        id.toLowerCase(),
+      ),
+    );
+  }
   const unknown = rejectUnknownKeys(body, DECISION_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const decision = readString(body, "decision", {
@@ -622,6 +790,15 @@ export async function decideProposal(
         404,
         "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
         "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
+        {
+          denyAudit: {
+            action: "authz.role.assign",
+            resourceType: "role_assignment_proposal",
+            resourceId: proposalId,
+            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
+            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
+          },
+        },
       );
     }
     const proposal = cur.rows[0]!;
@@ -663,11 +840,16 @@ export async function decideProposal(
           ? await applyAssign(client, proposal, now)
           : await applyRevoke(client, proposal, now);
       nextStatus = "APPROVED";
-      await client.query(
-        `UPDATE sessions SET revoked_at = $2::timestamptz, revoked_reason = 'ROLE_PROPOSAL_APPLIED'
-          WHERE staff_id = $1 AND revoked_at IS NULL`,
-        [proposal.target_staff_id, now.toISOString()],
-      );
+      const immediateEffect =
+        proposal.propose_action === "REVOKE" ||
+        proposal.effective_from.getTime() <= now.getTime();
+      if (immediateEffect) {
+        await client.query(
+          `UPDATE sessions SET revoked_at = $2::timestamptz, revoked_reason = 'ROLE_PROPOSAL_APPLIED'
+            WHERE staff_id = $1 AND revoked_at IS NULL`,
+          [proposal.target_staff_id, now.toISOString()],
+        );
+      }
     }
 
     const res = await client.query<ProposalView>(

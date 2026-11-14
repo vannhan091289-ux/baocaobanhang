@@ -70,16 +70,38 @@ export const NOT_FOUND_MESSAGE =
 export function notFound(
   resourceType: string,
   resourceId: string,
+  action = "org.staff.read",
 ): ServiceFailure {
   return fail(404, "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE", NOT_FOUND_MESSAGE, {
     denyAudit: {
-      action: "org.staff.read",
+      action,
       resourceType,
       resourceId,
       scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
       reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
     },
   });
+}
+
+export function tamperRejected(
+  action: string,
+  resourceType: string,
+  resourceId = "request",
+): ServiceFailure {
+  return fail(
+    403,
+    "CLIENT_ROLE_OR_SCOPE_TAMPER_REJECTED",
+    "Không chấp nhận tham số ghi đè vai trò hoặc phạm vi dữ liệu từ phía client.",
+    {
+      denyAudit: {
+        action,
+        resourceType,
+        resourceId,
+        scopeContext: { reason: "CLIENT_ROLE_OR_SCOPE_TAMPER_REJECTED" },
+        reasonCode: "CLIENT_ROLE_OR_SCOPE_TAMPER_REJECTED",
+      },
+    },
+  );
 }
 
 /** Records the DENY audit for a failed result (best effort; never converts DENY to ALLOW). */

@@ -11,12 +11,14 @@ import {
   finalizeFailure,
   notFound,
   runAuthorityTransaction,
+  tamperRejected,
   type Actor,
   type ServiceFailure,
   type ServiceResult,
 } from "./service-core";
 import {
   escapeLike,
+  findDisallowedTamperKey,
   isPlainObject,
   isUuid,
   readExpectedVersion,
@@ -24,6 +26,7 @@ import {
   readString,
   readUuid,
   rejectUnknownKeys,
+  validateQueryParams,
 } from "./validation";
 
 export interface DepartmentView {
@@ -120,6 +123,28 @@ function requireBranchRole(
 /* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
 
+const DEPT_QUERY_KEYS = [
+  "q",
+  "status",
+  "department_id",
+  "limit",
+  "offset",
+] as const;
+const STAFF_QUERY_KEYS = [
+  "q",
+  "status",
+  "department_id",
+  "limit",
+  "offset",
+] as const;
+const IDENTITY_QUERY_KEYS = [
+  "q",
+  "status",
+  "staff_id",
+  "limit",
+  "offset",
+] as const;
+
 export async function listDepartments(
   actor: Actor,
   params: URLSearchParams,
@@ -131,14 +156,53 @@ export async function listDepartments(
     { type: "department", id: "list" },
   );
   if (denied) return finalizeFailure(actor, denied);
+  const qCheck = validateQueryParams(params, DEPT_QUERY_KEYS);
+  if (!qCheck.ok) {
+    if (qCheck.kind === "TAMPER") {
+      return finalizeFailure(
+        actor,
+        tamperRejected("org.department.read", "department", "list"),
+      );
+    }
+    return validationFailure(qCheck.field, qCheck.reason);
+  }
   const page = readPageParams(params);
   if (!page.ok) return validationFailure(page.field, page.reason);
-  const status = params.get("status");
-  if (status !== null && status !== "ACTIVE" && status !== "INACTIVE") {
-    return validationFailure("status", "INVALID_STATUS");
+
+  const clauses: string[] = ["TRUE"];
+  const values: unknown[] = [];
+
+  const departmentId = params.get("department_id");
+  if (departmentId !== null) {
+    if (!isUuid(departmentId)) {
+      return finalizeFailure(
+        actor,
+        notFound("department", "invalid-reference", "org.department.read"),
+      );
+    }
+    values.push(departmentId.toLowerCase());
+    clauses.push(`id = $${values.length}`);
   }
-  const where = status ? "WHERE status = $1" : "";
-  const values = status ? [status] : [];
+  const status = params.get("status");
+  if (status !== null) {
+    if (status !== "ACTIVE" && status !== "INACTIVE") {
+      return validationFailure("status", "INVALID_STATUS");
+    }
+    values.push(status);
+    clauses.push(`status = $${values.length}`);
+  }
+  const q = params.get("q");
+  if (q !== null) {
+    const text = q.trim();
+    if (text.length < 1 || text.length > 64) {
+      return validationFailure("q", "INVALID_LENGTH");
+    }
+    values.push(`%${escapeLike(text)}%`);
+    clauses.push(
+      `(code ILIKE $${values.length} OR name ILIKE $${values.length})`,
+    );
+  }
+  const where = `WHERE ${clauses.join(" AND ")}`;
   const total = await db.query<{ n: string }>(
     `SELECT count(*)::text AS n FROM departments ${where}`,
     values,
@@ -167,6 +231,16 @@ export async function listStaff(
     { type: "staff", id: "list" },
   );
   if (denied) return finalizeFailure(actor, denied);
+  const qCheck = validateQueryParams(params, STAFF_QUERY_KEYS);
+  if (!qCheck.ok) {
+    if (qCheck.kind === "TAMPER") {
+      return finalizeFailure(
+        actor,
+        tamperRejected("org.staff.read", "staff", "list"),
+      );
+    }
+    return validationFailure(qCheck.field, qCheck.reason);
+  }
   const page = readPageParams(params);
   if (!page.ok) return validationFailure(page.field, page.reason);
 
@@ -264,13 +338,28 @@ export async function listIdentityLinks(
     id: "list",
   });
   if (denied) return finalizeFailure(actor, denied);
+  const qCheck = validateQueryParams(params, IDENTITY_QUERY_KEYS);
+  if (!qCheck.ok) {
+    if (qCheck.kind === "TAMPER") {
+      return finalizeFailure(
+        actor,
+        tamperRejected("org.staff.read", "identity_link", "list"),
+      );
+    }
+    return validationFailure(qCheck.field, qCheck.reason);
+  }
   const page = readPageParams(params);
   if (!page.ok) return validationFailure(page.field, page.reason);
   const clauses: string[] = ["TRUE"];
   const values: unknown[] = [];
   const staffId = params.get("staff_id");
   if (staffId !== null) {
-    if (!isUuid(staffId)) return validationFailure("staff_id", "INVALID_UUID");
+    if (!isUuid(staffId)) {
+      return finalizeFailure(
+        actor,
+        notFound("staff", "invalid-reference", "org.staff.read"),
+      );
+    }
     values.push(staffId.toLowerCase());
     clauses.push(`staff_id = $${values.length}`);
   }
@@ -281,6 +370,15 @@ export async function listIdentityLinks(
     }
     values.push(status);
     clauses.push(`status = $${values.length}`);
+  }
+  const q = params.get("q");
+  if (q !== null) {
+    const text = q.trim();
+    if (text.length < 1 || text.length > 64) {
+      return validationFailure("q", "INVALID_LENGTH");
+    }
+    values.push(`%${escapeLike(text)}%`);
+    clauses.push(`subject ILIKE $${values.length}`);
   }
   const where = clauses.join(" AND ");
   const total = await db.query<{ n: string }>(
@@ -344,6 +442,12 @@ export async function createDepartment(
   );
   if (denied) return finalizeFailure(actor, denied);
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), DEPARTMENT_CREATE_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected("org.department.write", "department", "new"),
+    );
+  }
   const unknown = rejectUnknownKeys(body, DEPARTMENT_CREATE_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const code = readString(body, "code", { max: 32, pattern: /^[A-Z0-9_]+$/ });
@@ -387,8 +491,17 @@ export async function patchDepartment(
   );
   if (denied) return finalizeFailure(actor, denied);
   if (!isUuid(id))
-    return finalizeFailure(actor, notFound("department", "invalid-reference"));
+    return finalizeFailure(
+      actor,
+      notFound("department", "invalid-reference", "org.department.write"),
+    );
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), DEPARTMENT_PATCH_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected("org.department.write", "department", id.toLowerCase()),
+    );
+  }
   const unknown = rejectUnknownKeys(body, DEPARTMENT_PATCH_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const version = readExpectedVersion(body);
@@ -416,6 +529,15 @@ export async function patchDepartment(
         404,
         "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
         "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
+        {
+          denyAudit: {
+            action: "org.department.write",
+            resourceType: "department",
+            resourceId: deptId,
+            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
+            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
+          },
+        },
       );
     }
     if (cur.rows[0]!.row_version !== version.value) {
@@ -494,6 +616,12 @@ export async function createStaff(
   );
   if (denied) return finalizeFailure(actor, denied);
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), STAFF_CREATE_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected("org.staff.write", "staff", "new"),
+    );
+  }
   const unknown = rejectUnknownKeys(body, STAFF_CREATE_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const staffCode = readString(body, "staff_code", {
@@ -587,8 +715,17 @@ export async function patchStaff(
   );
   if (denied) return finalizeFailure(actor, denied);
   if (!isUuid(id))
-    return finalizeFailure(actor, notFound("staff", "invalid-reference"));
+    return finalizeFailure(
+      actor,
+      notFound("staff", "invalid-reference", "org.staff.write"),
+    );
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), STAFF_PATCH_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected("org.staff.write", "staff", id.toLowerCase()),
+    );
+  }
   const unknown = rejectUnknownKeys(body, STAFF_PATCH_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const version = readExpectedVersion(body);
@@ -648,6 +785,15 @@ export async function patchStaff(
         404,
         "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
         "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
+        {
+          denyAudit: {
+            action: "org.staff.write",
+            resourceType: "staff",
+            resourceId: staffId,
+            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
+            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
+          },
+        },
       );
     }
     const before = cur.rows[0]!;
@@ -769,6 +915,12 @@ export async function createIdentityLink(
   );
   if (denied) return finalizeFailure(actor, denied);
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), IDENTITY_CREATE_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected("org.staff.write", "identity_link", "new"),
+    );
+  }
   const unknown = rejectUnknownKeys(body, IDENTITY_CREATE_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const staffId = readUuid(body, "staff_id");
@@ -833,9 +985,15 @@ export async function patchIdentityLink(
   if (!isUuid(id))
     return finalizeFailure(
       actor,
-      notFound("identity_link", "invalid-reference"),
+      notFound("identity_link", "invalid-reference", "org.staff.write"),
     );
   if (!isPlainObject(body)) return validationFailure("body", "MUST_BE_OBJECT");
+  if (findDisallowedTamperKey(Object.keys(body), IDENTITY_PATCH_KEYS)) {
+    return finalizeFailure(
+      actor,
+      tamperRejected("org.staff.write", "identity_link", id.toLowerCase()),
+    );
+  }
   const unknown = rejectUnknownKeys(body, IDENTITY_PATCH_KEYS);
   if (!unknown.ok) return validationFailure(unknown.field, unknown.reason);
   const version = readExpectedVersion(body);
@@ -854,6 +1012,15 @@ export async function patchIdentityLink(
         404,
         "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
         "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
+        {
+          denyAudit: {
+            action: "org.staff.write",
+            resourceType: "identity_link",
+            resourceId: linkId,
+            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
+            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
+          },
+        },
       );
     }
     const link = cur.rows[0]!;

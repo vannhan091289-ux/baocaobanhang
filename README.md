@@ -1,6 +1,6 @@
 # Branch Sales OS — Báo cáo và quản trị bán hàng chi nhánh
 
-**Trạng thái:** Sprint 1 — Slice `S1-A` (`TASK-0003`: Synthetic Identity, Session, 7-Table Schema & Default-Deny Authorization Foundation). Đã kích hoạt luồng đăng nhập OIDC qua Keycloak 26.8.2 test, phiên làm việc server-side trên PostgreSQL 18.7, đánh giá đúng 1 vai trò hiệu lực (`ADR-002 v0.3`) và ghi nhận `AuditEvent`. Chưa triển khai Org CRUD (`S1-B`), workflow gán quyền (`S1-B/C`), chỉ tiêu KPI (`P0A`), kế hoạch/Actual/Dashboard (`P0B`), hay Lead/Customer/cảnh báo (`P0C/D`).
+**Trạng thái:** Sprint 1 (`S1-A`, `S1-B`, `S1-C` — `TASK-0003`..`TASK-0005`, Scope: `DEVTEST` Synthetic) **ĐÃ HOÀN TẤT**. Đã kích hoạt và chứng nhận toàn diện luồng đăng nhập OIDC qua Keycloak 26.8.2 test, phiên làm việc server-side trên PostgreSQL 18.7, đánh giá đúng 1 vai trò hiệu lực (`ADR-002 v0.3`), CRUD danh mục tổ chức (`Department`, `Staff`, `IdentityLink`), luồng đề nghị/phê duyệt phân quyền 2 bước (`Maker-Checker` `RoleAssignmentProposal` + `RoleAssignment`), ma trận kiểm thử phân quyền/biên thời gian/đồng thời và ghi nhận `AuditEvent` nguyên tử. Sẵn sàng triển khai các phân hệ nghiệp vụ `P0A`..`P0D` (`TASK-0006`..`TASK-0011`) theo lộ trình đã duyệt.
 
 Ứng dụng quản trị bán hàng tinh gọn cho ba phòng: Cá nhân (`KHCN`), Doanh nghiệp (`KHDN`), Dịch vụ KH (`DVKH`).
 

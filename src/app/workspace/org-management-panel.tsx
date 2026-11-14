@@ -70,6 +70,7 @@ export interface OrgManagementPanelProps {
 
 export function OrgManagementPanel({
   csrfToken,
+  actorStaffId,
   actorRoleCode,
 }: OrgManagementPanelProps) {
   const isConfigAdmin = actorRoleCode === "CONFIG_ADMIN";
@@ -82,6 +83,7 @@ export function OrgManagementPanel({
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignmentItem[]>(
     [],
   );
+  const [roleStatusFilter, setRoleStatusFilter] = useState<string>("ALL");
   const [proposals, setProposals] = useState<ProposalItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -256,6 +258,40 @@ export function OrgManagementPanel({
     }
     setNewStaffCode("");
     setNewStaffName("");
+    await loadAll();
+  }
+
+  async function handleDeactivateStaff(staffItem: StaffItem) {
+    setErrorBanner(null);
+    setStatusBanner(null);
+
+    const res = await fetch(`/api/org/staff/${staffItem.id}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": csrfToken,
+      },
+      body: JSON.stringify({
+        expected_version: staffItem.row_version,
+        status: "INACTIVE",
+      }),
+    });
+
+    const payload = (await res.json()) as {
+      data?: StaffItem;
+      error?: { code?: string; message?: string };
+    };
+
+    if (!res.ok) {
+      setErrorBanner(
+        `Lỗi ngừng kích hoạt nhân sự (${res.status}): ${payload.error?.code ?? "ERROR"} - ${payload.error?.message ?? ""}`,
+      );
+      return;
+    }
+
+    setStatusBanner(
+      `Đã ngừng kích hoạt nhân sự ${staffItem.staff_code} và thu hồi quyền/phiên liên quan.`,
+    );
     await loadAll();
   }
 
@@ -466,6 +502,7 @@ export function OrgManagementPanel({
                   <th scope="col">Phòng ban</th>
                   <th scope="col">Trạng thái</th>
                   <th scope="col">Phiên bản</th>
+                  {isConfigAdmin && <th scope="col">Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
@@ -480,8 +517,26 @@ export function OrgManagementPanel({
                       <td>
                         {dept ? `${dept.name} (${dept.code})` : s.department_id}
                       </td>
-                      <td>{s.status}</td>
+                      <td data-testid={`staff-status-${s.staff_code}`}>
+                        {s.status}
+                      </td>
                       <td>{s.row_version}</td>
+                      {isConfigAdmin && (
+                        <td>
+                          {s.status === "ACTIVE" && s.id !== actorStaffId ? (
+                            <button
+                              type="button"
+                              className="scaffold-link"
+                              data-testid={`deactivate-staff-${s.staff_code}`}
+                              onClick={() => void handleDeactivateStaff(s)}
+                            >
+                              Ngừng kích hoạt (INACTIVE)
+                            </button>
+                          ) : (
+                            <span>—</span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -555,8 +610,24 @@ export function OrgManagementPanel({
         aria-labelledby="s1b-role-assignments-heading"
       >
         <h2 id="s1b-role-assignments-heading">
-          Phân quyền hiệu lực (Role Assignments)
+          Phân quyền hiệu lực &amp; Lịch sử thay đổi phân quyền (Role
+          Assignments — S1-C)
         </h2>
+        <div className="s1b-form-row" style={{ maxWidth: "320px" }}>
+          <label htmlFor="role-status-filter">
+            Lọc trạng thái lịch sử quyền
+          </label>
+          <select
+            id="role-status-filter"
+            data-testid="select-role-status-filter"
+            value={roleStatusFilter}
+            onChange={(e) => setRoleStatusFilter(e.target.value)}
+          >
+            <option value="ALL">Tất cả (ACTIVE + REVOKED)</option>
+            <option value="ACTIVE">Đang hiệu lực (ACTIVE)</option>
+            <option value="REVOKED">Đã thu hồi / Lịch sử (REVOKED)</option>
+          </select>
+        </div>
         {loading ? (
           <p>Đang tải danh sách phân quyền...</p>
         ) : roleAssignments.length === 0 ? (
@@ -567,7 +638,7 @@ export function OrgManagementPanel({
               className="s1b-table"
               data-testid="s1b-role-assignments-table"
             >
-              <caption>Danh sách phân quyền theo phạm vi</caption>
+              <caption>Danh sách và lịch sử phân quyền theo phạm vi</caption>
               <thead>
                 <tr>
                   <th scope="col">Mã nhân sự</th>
@@ -575,27 +646,35 @@ export function OrgManagementPanel({
                   <th scope="col">Phạm vi</th>
                   <th scope="col">Trạng thái</th>
                   <th scope="col">Hiệu lực từ</th>
+                  <th scope="col">Hiệu lực đến</th>
                 </tr>
               </thead>
               <tbody>
-                {roleAssignments.map((r) => {
-                  const st = staffById.get(r.staff_id);
-                  const staffCode = st?.staff_code ?? r.staff_id;
-                  return (
-                    <tr
-                      key={r.id}
-                      data-testid={`role-assignment-row-${staffCode}-${r.status}`}
-                    >
-                      <td>
-                        <code>{staffCode}</code>
-                      </td>
-                      <td>{r.role_code}</td>
-                      <td>{r.scope_type}</td>
-                      <td>{r.status}</td>
-                      <td>{r.effective_from}</td>
-                    </tr>
-                  );
-                })}
+                {roleAssignments
+                  .filter(
+                    (r) =>
+                      roleStatusFilter === "ALL" ||
+                      r.status === roleStatusFilter,
+                  )
+                  .map((r) => {
+                    const st = staffById.get(r.staff_id);
+                    const staffCode = st?.staff_code ?? r.staff_id;
+                    return (
+                      <tr
+                        key={r.id}
+                        data-testid={`role-assignment-row-${staffCode}-${r.status}`}
+                      >
+                        <td>
+                          <code>{staffCode}</code>
+                        </td>
+                        <td>{r.role_code}</td>
+                        <td>{r.scope_type}</td>
+                        <td>{r.status}</td>
+                        <td>{r.effective_from}</td>
+                        <td>{r.effective_to ?? "Không thời hạn"}</td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

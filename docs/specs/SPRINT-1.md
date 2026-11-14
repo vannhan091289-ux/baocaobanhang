@@ -1,11 +1,10 @@
-# Sprint 1 — S1-A DEVTEST đã duyệt; S1-B/C dự thảo
+# Sprint 1 — S1-A, S1-B & S1-C DEVTEST đã hoàn tất và nghiệm thu
 
-Status: DRAFT — toàn Sprint 1 chưa được mở khóa
-Approved scope: S1-A DEVTEST qua TASK-0003 READY sau merge PR #5; execution preflight bắt buộc
-Version: 0.5
-Prepared: 2026-11-13 (Asia/Ho_Chi_Minh)
-Baseline: main b04b69d1c63ae9f0a9aa525944c15056efe76ef0; TASK-0002 ACCEPTED
-Preparation task: [TASK-0002](../../tasks/TASK-0002.md), chỉ `DOCUMENTATION_ONLY`; nghiệm thu tài liệu không cho phép code Sprint 1
+Status: ACCEPTED (Scope: DEVTEST Synthetic — S1-A TASK-0003, S1-B TASK-0004, S1-C TASK-0005)
+Approved scope: S1-A/S1-B/S1-C DEVTEST qua SPRINT-1-APPROVAL.md (2026-11-13) và SPRINT-1-BC-APPROVAL-2026-11-14.md (2026-11-14)
+Version: 1.0
+Prepared: 2026-11-14 (Asia/Ho_Chi_Minh)
+Baseline: main 52843270e7d743d14c40ad287b748847b7097994; TASK-0002, TASK-0003, TASK-0004, TASK-0005 ACCEPTED
 
 Approval package: [D-08/D-09/ADR-002](../decisions/SPRINT-1-APPROVAL.md), ACCEPTED cho DEVTEST 2026-11-13; [image manifest](../decisions/SPRINT-1-IMAGES.md) LOCKED. [TASK-0003](../../tasks/TASK-0003.md) READY chỉ S1-A sau merge; máy Antigravity thiếu runtime phải BLOCKED trước code/install/pull/migrate. Lượt cập nhật này chưa code/deploy.
 
@@ -174,4 +173,4 @@ Các slices dưới giữ trình tự giảm rủi ro: S1-A được duyệt ri�
 
 Chủ dự án đã duyệt D-08 B / D-09 A / ADR-002 v0.3 / S1-A vào 2026-11-13; nguyên văn/reference tại [approval package](../decisions/SPRINT-1-APPROVAL.md) mục 6. [TASK-0003](../../tasks/TASK-0003.md) (`S1-A`) đã được triển khai, kiểm chứng toàn bộ `AC-01`..`AC-10` trên Colima ARM64 local và GitHub Actions CI (`linux/amd64`), được nghiệm thu `ACCEPTED` và hợp nhất vào `main` qua [PR #6](https://github.com/vannhan091289-ux/baocaobanhang/pull/6) tại SHA `d8a7bd9c4b8bbebb738dd84f7369a9446e46b2dc`.
 
-Đối với `S1-B` và `S1-C`: gói đặc tả chi tiết [tasks/TASK-0004.md](../../tasks/TASK-0004.md) (`S1-B`), [tasks/TASK-0005.md](../../tasks/TASK-0005.md) (`S1-C`) và đề xuất schema migration `0003` kèm gói phương án `P0A`..`P0D` đã được hoàn thiện tại [docs/decisions/SPRINT-1-BC-PROPOSAL.md](../decisions/SPRINT-1-BC-PROPOSAL.md) ở trạng thái `REVIEWED` / `PROPOSED`. Ngay khi Chủ dự án phê duyệt gói đề xuất này và chuyển `TASK-0004` sang `READY`, Antigravity sẽ triển khai `S1-B` (và tiếp nối `S1-C` sau nghiệm thu `S1-B`). Không tự đóng `D-01`..`D-05`, `D-07`, `D-10` khi chưa có phê duyệt.
+Đối với `S1-B` và `S1-C`: Chủ dự án đã phê duyệt chính thức gói đề xuất [docs/decisions/SPRINT-1-BC-PROPOSAL.md](../decisions/SPRINT-1-BC-PROPOSAL.md) v0.2 tại [docs/decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md](../decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md) vào ngày 2026-11-14. [TASK-0004](../../tasks/TASK-0004.md) (`S1-B`) đã được triển khai, nghiệm thu `ACCEPTED` và hợp nhất qua [PR #11](https://github.com/vannhan091289-ux/baocaobanhang/pull/11) tại SHA `52843270e7d743d14c40ad287b748847b7097994`. [TASK-0005](../../tasks/TASK-0005.md) (`S1-C`) hoàn tất chứng nhận ma trận phân quyền vét cạn, kiểm soát lọc phạm vi/tìm kiếm/phân trang chống suy diễn, biên thời gian chuyển giao quyền tuần tự, tranh chấp đồng thời trên PostgreSQL 18.7 và kiểm toán `AuditEvent` toàn diện (`AC-01`..`AC-10` `PASS`). Các quyết định `D-05` và `D-10` tiếp tục giữ trạng thái `OPEN`.

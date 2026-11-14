@@ -279,4 +279,150 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+
+  test("S1-C AC-07 Multi-Role Journey: Maker-Checker role grant for syn.zerorole -> new login -> DEPARTMENT_MANAGER scope isolation -> immediate session revocation on staff deactivation", async ({
+    browser,
+  }) => {
+    const password = getSyntheticPassword();
+    const zeroRoleStaffId = "22222222-2222-4222-8222-222222222209";
+    const zeroRoleCode = "SYN-ZEROROLE-001";
+
+    const adminContext = await browser.newContext();
+    const execContext = await browser.newContext();
+    const zeroContext = await browser.newContext();
+    const mgrContext = await browser.newContext();
+
+    try {
+      // 1. CONFIG_ADMIN logs in and proposes STAFF role for SYN-ZEROROLE-001
+      const adminPage = await adminContext.newPage();
+      await adminPage.goto("/auth/login");
+      await adminPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await adminPage.locator("#username").fill("syn.admin01");
+      await adminPage.locator("#password").fill(password);
+      await adminPage.locator("#kc-login").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await adminPage
+        .getByTestId("select-proposal-staff")
+        .selectOption(zeroRoleStaffId);
+      await adminPage.getByTestId("select-proposal-role").selectOption("STAFF");
+      await adminPage
+        .getByTestId("input-proposal-reason")
+        .fill("Cấp quyền STAFF cho syn.zerorole trong kịch bản S1-C E2E");
+      await adminPage.getByTestId("submit-create-proposal").click();
+
+      await expect(
+        adminPage.getByTestId(`proposal-row-${zeroRoleCode}-PENDING`),
+      ).toBeVisible();
+
+      // 2. EXECUTIVE logs in and approves the proposal for SYN-ZEROROLE-001
+      const execPage = await execContext.newPage();
+      await execPage.goto("/auth/login");
+      await execPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await execPage.locator("#username").fill("syn.exec01");
+      await execPage.locator("#password").fill(password);
+      await execPage.locator("#kc-login").click();
+      await execPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await expect(
+        execPage.getByTestId(`proposal-row-${zeroRoleCode}-PENDING`),
+      ).toBeVisible();
+      await execPage.getByTestId(`approve-proposal-${zeroRoleCode}`).click();
+      await expect(
+        execPage.getByTestId(`proposal-row-${zeroRoleCode}-APPROVED`),
+      ).toBeVisible();
+
+      // 3. syn.zerorole logs in via Keycloak OIDC and receives the newly granted STAFF (SELF) role
+      const zeroPage = await zeroContext.newPage();
+      await zeroPage.goto("/auth/login");
+      await zeroPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await zeroPage.locator("#username").fill("syn.zerorole");
+      await zeroPage.locator("#password").fill(password);
+      await zeroPage.locator("#kc-login").click();
+      await zeroPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await expect(zeroPage.getByTestId("self-staff-code")).toHaveText(
+        zeroRoleCode,
+      );
+      await expect(zeroPage.getByTestId("self-role-code")).toContainText(
+        "STAFF",
+      );
+      await expect(zeroPage.getByTestId("self-scope-type")).toContainText(
+        "SELF",
+      );
+      // SELF scope sees only own staff row and restricted governance notice
+      await expect(
+        zeroPage.getByTestId(`staff-row-${zeroRoleCode}`),
+      ).toBeVisible();
+      await expect(
+        zeroPage.getByTestId("staff-row-SYN-STAFF-KHDN-01"),
+      ).toHaveCount(0);
+      await expect(
+        zeroPage.getByTestId("s1b-restricted-governance-notice"),
+      ).toBeVisible();
+
+      // 4. DEPARTMENT_MANAGER (KHCN) logs in and sees only KHCN staff (never KHDN staff)
+      const mgrPage = await mgrContext.newPage();
+      await mgrPage.goto("/auth/login");
+      await mgrPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await mgrPage.locator("#username").fill("syn.mgr.khcn");
+      await mgrPage.locator("#password").fill(password);
+      await mgrPage.locator("#kc-login").click();
+      await mgrPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await expect(
+        mgrPage.getByTestId("staff-row-SYN-STAFF-KHCN-01"),
+      ).toBeVisible();
+      await expect(
+        mgrPage.getByTestId(`staff-row-${zeroRoleCode}`),
+      ).toBeVisible();
+      await expect(
+        mgrPage.getByTestId("staff-row-SYN-STAFF-KHDN-01"),
+      ).toHaveCount(0);
+
+      // 5. CONFIG_ADMIN deactivates SYN-ZEROROLE-001 in UI -> immediately revokes syn.zerorole's active session
+      await adminPage.reload();
+      await expect(
+        adminPage.getByTestId(`deactivate-staff-${zeroRoleCode}`),
+      ).toBeVisible();
+      await adminPage.getByTestId(`deactivate-staff-${zeroRoleCode}`).click();
+      await expect(
+        adminPage.getByTestId(`staff-status-${zeroRoleCode}`),
+      ).toHaveText("INACTIVE");
+
+      // syn.zerorole's existing session is immediately invalidated on next request
+      const zeroMeAfterDeactivate = await zeroPage.request.get("/api/me");
+      expect(zeroMeAfterDeactivate.status()).toBe(401);
+
+      // Restore SYN-ZEROROLE-001 back to ACTIVE (with 0 active roles, matching initial seed state)
+      const staffGet = await adminPage.request.get(
+        `/api/org/staff/${zeroRoleStaffId}`,
+      );
+      const staffData = (await staffGet.json()) as {
+        data: { row_version: number };
+      };
+      const csrfInput = await adminPage
+        .locator('input[name="csrf_token"]')
+        .inputValue();
+      const restoreRes = await adminPage.request.patch(
+        `/api/org/staff/${zeroRoleStaffId}`,
+        {
+          headers: {
+            origin: "http://127.0.0.1:3100",
+            "x-csrf-token": csrfInput,
+          },
+          data: {
+            expected_version: staffData.data.row_version,
+            status: "ACTIVE",
+          },
+        },
+      );
+      expect(restoreRes.status()).toBe(200);
+    } finally {
+      await adminContext.close();
+      await execContext.close();
+      await zeroContext.close();
+      await mgrContext.close();
+    }
+  });
 });
