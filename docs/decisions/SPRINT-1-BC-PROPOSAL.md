@@ -2,9 +2,9 @@
 
 Status: PROPOSED — trình Chủ dự án phê duyệt để chuyển `TASK-0004` (`S1-B`) và `TASK-0005` (`S1-C`) sang `READY`
 Scope: DEVTEST — mở rộng từ `S1-A` (`TASK-0003` `ACCEPTED`) sang `S1-B` & `S1-C` local/CI synthetic; kèm gói phương án cho `D-01`..`D-04`, `D-07`, `ADR-003`..`005`
-Version: 0.1
+Version: 0.2
 Prepared: 2026-11-14 (Asia/Ho_Chi_Minh)
-Baseline: main `d8a7bd9c4b8bbebb738dd84f7369a9446e46b2dc` (`TASK-0003` `ACCEPTED`, [PR #6](https://github.com/vannhan091289-ux/baocaobanhang/pull/6) merged)
+Baseline: main `6751faa4d1100548cddff4ae5efaab30d832047a` (`TASK-0003` `ACCEPTED` tại [PR #6](https://github.com/vannhan091289-ux/baocaobanhang/pull/6); gói đề xuất `S1-B`/`S1-C` v0.1 tại [PR #7](https://github.com/vannhan091289-ux/baocaobanhang/pull/7); điều phối tại [Issue #8](https://github.com/vannhan091289-ux/baocaobanhang/issues/8))
 References:
 - [docs/runbooks/ANTIGRAVITY-RUN-TO-HANDOVER.md](../runbooks/ANTIGRAVITY-RUN-TO-HANDOVER.md)
 - [docs/decisions/SPRINT-1-APPROVAL.md](SPRINT-1-APPROVAL.md)
@@ -12,6 +12,7 @@ References:
 - [docs/specs/SPRINT-1.md](../specs/SPRINT-1.md)
 - [tasks/TASK-0004.md](../../tasks/TASK-0004.md)
 - [tasks/TASK-0005.md](../../tasks/TASK-0005.md)
+- [tasks/TASK-0006.md](../../tasks/TASK-0006.md) .. [tasks/TASK-0011.md](../../tasks/TASK-0011.md)
 
 ---
 
@@ -28,17 +29,57 @@ Theo [AGENTS.md](../../AGENTS.md) mục 1, 3, 4 và [docs/runbooks/ANTIGRAVITY-R
 
 ## 2. Đề xuất Schema & Quyền DB cho `S1-B` / `S1-C` (`migrations/0003_s1b_org_and_role_workflow.sql`)
 
-### 2.1 Lý do cần Additive Migration `0003`
+### 2.1 Lý do cần Additive Migration `0003` và Khắc phục Lỗi Timezone `TIMESTAMPTZ`
 Trong `S1-A` (`0001_s1a_foundation.sql` + `0002_revoke_changed_session_authority.sql`):
 - `app_runtime_role` chỉ có quyền `SELECT` trên `departments`, `staff`, `identity_links`, `role_assignments`.
 - Bảng `role_assignments` chỉ lưu các bản ghi phân quyền đã được duyệt (`status IN ('ACTIVE', 'REVOKED')`) với `approval_reference NOT NULL`. Để thực thi đúng quy tắc **Maker-Checker** tại `ADR-002` mục 6.1 (*"CONFIG_ADMIN đề nghị thay đổi quyền của người khác, EXECUTIVE phê duyệt; actor đề nghị, actor phê duyệt và Staff đích phải khác nhau"*) mà không làm bẩn bảng `role_assignments` đang có hiệu lực hoặc vi phạm quy tắc *"đúng một RoleAssignment hiệu lực mỗi Staff"*, cần bảng lưu trữ yêu cầu đề nghị thay đổi quyền (`role_assignment_proposals`) cùng cột `row_version` chống lost update.
+
+#### Kết quả Audit Độc lập về Biểu thức `(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')` trên Cột `TIMESTAMPTZ` ([Issue #8](https://github.com/vannhan091289-ux/baocaobanhang/issues/8) Bước 2)
+- **Hiện tượng & Nguyên nhân gốc rễ trên PostgreSQL 18.7:**
+  - Trong PostgreSQL, `CURRENT_TIMESTAMP` (và `NOW()`) vốn đã trả về kiểu `TIMESTAMPTZ` (`timestamp with time zone`, được lưu nội bộ dưới dạng micro-giây chuẩn UTC tính từ epoch).
+  - Khi áp dụng toán tử `AT TIME ZONE 'UTC'` lên một giá trị `TIMESTAMPTZ`, PostgreSQL chuyển đổi giá trị đó sang kiểu **`TIMESTAMP WITHOUT TIME ZONE`** biểu diễn giờ đồng hồ treo tường tại UTC.
+  - Khi giá trị `TIMESTAMP WITHOUT TIME ZONE` này được gán ngược vào một cột hoặc biến kiểu `TIMESTAMPTZ` (như trong `DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')` hoặc `NEW.updated_at := CURRENT_TIMESTAMP AT TIME ZONE 'UTC'`), PostgreSQL sẽ **diễn giải lại giờ không múi đó theo `TimeZone` của phiên kết nối hiện tại (`session TimeZone`)**!
+- **Bằng chứng thực nghiệm trên container `PostgreSQL 18.7` (`baocaobanhang-s1a-postgres`) với `SET TIME ZONE 'Asia/Ho_Chi_Minh'` (`+07`):**
+  ```text
+     session_tz     |      correct_utc_instant      |    stripped_without_tz     |  assigned_to_timestamptz_col  | error_offset_seconds
+  ------------------+-------------------------------+----------------------------+-------------------------------+----------------------
+   Asia/Ho_Chi_Minh | 2026-11-14 09:33:03.641945+07 | 2026-11-14 02:33:03.641945 | 2026-11-14 02:33:03.641945+07 |        -25200.000000
+  ```
+  - Khi `TimeZone` của phiên là `Asia/Ho_Chi_Minh` (`+07`), biểu thức `(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::timestamptz` làm lệch thời điểm thực tế đi **`-25200` giây (`-7 giờ`)**!
+- **Giải pháp khắc phục an toàn, không sửa lịch sử migration đã áp dụng (`0001`, `0002`):**
+  1. Giữ nguyên tuyệt đối hai file migration đã áp dụng trên `main` (`migrations/0001_s1a_foundation.sql` và `migrations/0002_revoke_changed_session_authority.sql`) để bảo toàn tính bất biến của lịch sử migration.
+  2. Trong bản đề xuất `migrations/0003_s1b_org_and_role_workflow.sql` dưới đây:
+     - Dùng trực tiếp `DEFAULT CURRENT_TIMESTAMP` trên `role_assignment_proposals.created_at` và `updated_at`.
+     - Trong hàm trigger `bump_s1b_row_version()`, dùng `NEW.updated_at := CURRENT_TIMESTAMP;` (tương đồng với `revoked_at = CURRENT_TIMESTAMP` đã dùng đúng trong `0002_revoke_changed_session_authority.sql`).
+     - Bổ sung các lệnh `ALTER TABLE ... ALTER COLUMN ... SET DEFAULT CURRENT_TIMESTAMP;` cho toàn bộ 9 cột `TIMESTAMPTZ` của `0001_s1a_foundation.sql` (`departments.created_at`, `departments.updated_at`, `staff.created_at`, `staff.updated_at`, `identity_links.created_at`, `identity_links.updated_at`, `role_assignments.created_at`, `role_assignments.updated_at`, `audit_events.occurred_at`) để triệt tiêu hoàn toàn nguy cơ lệch múi giờ trên mọi kết nối không phải UTC.
 
 ### 2.2 Bản xem trước SQL Đề xuất (`migrations/0003_s1b_org_and_role_workflow.sql` — Chưa thực thi)
 
 ```sql
 -- 0003_s1b_org_and_role_workflow.sql (PROPOSED — DO NOT EXECUTE BEFORE TASK-0004 READY)
--- Sprint 1 (S1-B / S1-C): Optimistic concurrency (row_version), Maker-Checker role_assignment_proposals,
--- authority serialization triggers, and least-privilege DML grants for app_runtime_role.
+-- Sprint 1 (S1-B / S1-C): Forward-compatible TIMESTAMPTZ default fix, optimistic concurrency (row_version),
+-- Maker-Checker role_assignment_proposals, authority serialization triggers, and least-privilege DML grants.
+
+-- 0. Fix TIMESTAMPTZ column defaults from 0001 without altering applied migration files:
+--    CURRENT_TIMESTAMP is already TIMESTAMPTZ (UTC instant); avoids -7h drift when session TimeZone <> 'UTC'.
+ALTER TABLE departments
+  ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP,
+  ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE staff
+  ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP,
+  ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE identity_links
+  ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP,
+  ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE role_assignments
+  ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP,
+  ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE audit_events
+  ALTER COLUMN occurred_at SET DEFAULT CURRENT_TIMESTAMP;
 
 -- 1. Optimistic concurrency row_version on existing S1-A organization & role tables
 ALTER TABLE departments
@@ -78,8 +119,8 @@ CREATE TABLE role_assignment_proposals (
   decided_at TIMESTAMPTZ NULL,
   applied_assignment_id UUID NULL REFERENCES role_assignments (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT ( CURRENT_TIMESTAMP AT TIME ZONE 'UTC' ),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT ( CURRENT_TIMESTAMP AT TIME ZONE 'UTC' ),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT chk_proposal_interval CHECK (
     effective_to IS NULL OR effective_to > effective_from
   ),
@@ -122,7 +163,7 @@ BEGIN
   ELSIF NEW.row_version <> OLD.row_version + 1 THEN
     RAISE EXCEPTION 'INVALID_ROW_VERSION_STEP';
   END IF;
-  NEW.updated_at := CURRENT_TIMESTAMP AT TIME ZONE 'UTC';
+  NEW.updated_at := CURRENT_TIMESTAMP;
   RETURN NEW;
 END
 $$;
