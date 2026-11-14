@@ -21,3 +21,7 @@
 
 ## Chính sách GitHub
 Bảo vệ main; ưu tiên review+CI; không push trực tiếp main. Không triển khai production như hậu quả tự động của việc task READY.
+
+## Quyền DEVTEST riêng — quyết định 2026-11-14
+
+[Approval](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md) cho phép Antigravity thực thi TASK-0004..0011 trên synthetic DEVTEST, chuyển READY tuần tự theo phụ thuộc và sửa lỗi trong phạm vi; TASK-0004 READY sau khi tài liệu phê duyệt được merge. Chủ dự án ủy quyền *technical PR merge* trong phạm vi này khi PR đã qua independent Standards/Spec/security review, CI chính xác ở final head PASS, không còn Critical/High/P1/P2 và GitHub protections cho phép; cấm tự phê duyệt PR hoặc vượt branch protection. Hướng dẫn chung trước đây 'không merge' tiếp tục áp dụng ngoài phạm vi ủy quyền này. Production, D-05/D-10, dữ liệu thật, deploy và chứng nhận UAT của chủ dự án vẫn yêu cầu phê duyệt riêng.

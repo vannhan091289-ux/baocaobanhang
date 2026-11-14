@@ -2,16 +2,20 @@
 
 | ID | Quyết định cần chốt | Đề xuất hiện tại | Gate |
 |---|---|---|---|
-| D-01 | Công thức/nguồn KPI | OPEN — Không hardcode khi thiếu | Trước KPI implementation |
-| D-02 | Ghi nhận bán chéo nhiều nhân sự | OPEN — Attribution theo từng metric | Trước Actual reconciliation |
-| D-03 | Lịch ngày làm việc, kỳ tuần | OPEN — Calendar cấu hình | Trước reminder/report |
-| D-04 | SLA cảnh báo và escalation | OPEN — Ngưỡng đề xuất, chưa phê duyệt | Trước alert production |
+| D-01 | Công thức/nguồn KPI | ACCEPTED (synthetic DEVTEST) — Option A, seven typed KPI groups/metric aggregation; not bank official policy | Development-only approval recorded [2026-11-14](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md); real data/production excluded |
+| D-02 | Ghi nhận bán chéo nhiều nhân sự | ACCEPTED (synthetic DEVTEST) — Option A, attribution weights by metric, no duplicate branch counts | Development-only approval recorded [2026-11-14](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md); real data/production excluded |
+| D-03 | Lịch ngày làm việc, kỳ tuần | ACCEPTED (synthetic DEVTEST) — Option A, Asia/Ho_Chi_Minh working calendar and weekly review | Development-only approval recorded [2026-11-14](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md); real data/production excluded |
+| D-04 | SLA cảnh báo và escalation | ACCEPTED (synthetic DEVTEST) — Option A, configurable in-app alerts and sample test-only thresholds | Development-only approval recorded [2026-11-14](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md); real data/production excluded |
 | D-05 | Dữ liệu KH và hosting | OPEN — Synthetic only | Trước real-data pilot |
 | D-06 | Stack scaffold Sprint 0 và ranh giới SSO | ACCEPTED cho Sprint 0 — [ADR-001](adr/ADR-001-stack.md) v1.0; SSO/auth hoãn sang D-08 | Scaffold được mở khóa bởi [TASK-0001](../tasks/TASK-0001.md) ACCEPTED; chưa duyệt stack production |
-| D-07 | Điểm tổng hợp KPI chi nhánh | OPEN — Không tự tạo trung bình | Trước executive composite |
+| D-07 | Điểm tổng hợp KPI chi nhánh | ACCEPTED (synthetic DEVTEST) — no composite score, seven independent KPI group statuses | Development-only approval recorded [2026-11-14](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md); real data/production excluded |
 | D-08 | SSO/auth doanh nghiệp: IdP, giao thức, session/token/logout | ACCEPTED (Scope: DEVTEST) — B: Keycloak OIDC test + profile/session tại [gói phê duyệt](decisions/SPRINT-1-APPROVAL.md) v1.0; chủ dự án duyệt 2026-11-13 | Phải duyệt cùng [ADR-002](adr/ADR-002-authorization.md) trước bất kỳ code auth/Sprint 1 (`S1-A`) nào; không chặn scaffold không auth |
-| D-09 | Database engine/ORM và môi trường dev/test cho Sprint 1 | ACCEPTED (Scope: DEVTEST) — A: PostgreSQL 18.7 local/CI synthetic + pg + node-pg-migrate, schema/rollback tại [gói phê duyệt](decisions/SPRINT-1-APPROVAL.md) v1.0; chủ dự án duyệt 2026-11-13 | Phải duyệt cùng [ADR-002](adr/ADR-002-authorization.md) trước bất kỳ code persistence/schema/migration (từ `S1-A`) nào; không thay D-05 cho hosting/dữ liệu thật |
+| D-09 | Database engine/ORM và môi trường dev/test cho Sprint 1 | ACCEPTED (synthetic DEVTEST) — PostgreSQL + additive migration 0003 v0.2 including TIMESTAMPTZ default corrections | Development-only approval recorded [2026-11-14](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md); real data/production excluded |
 | D-10 | Chuyển từ DEVTEST sang IdP doanh nghiệp/vận hành | OPEN — Đề xuất tách nghĩa vụ còn lại: IdP thật, MFA/re-auth/global logout, vận hành; D-08 DEVTEST không thay quyết định này | Phải có IT/owner approval và task riêng trước enterprise SSO; D-05 vẫn chặn real data/hosting |
+
+## DEVTEST approval — 2026-11-14
+
+Chủ dự án đã duyệt [SPRINT-1-BC-PROPOSAL.md v0.2](decisions/SPRINT-1-BC-PROPOSAL.md), bao gồm phương án A cho D-01..D-04, D-07, ADR-003..005; migration 0003; mở rộng D-09/ADR-002 cho S1-B/C. [Approval record](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md) là nguồn chuẩn cho quyền DEVTEST. D-05 và D-10 **OPEN**; không chứa quyền production hoặc dữ liệu thật. Các đoạn lịch sử dưới đây phản ánh trạng thái trước phê duyệt và không ghi đè quyết định mới.
 
 ## Chuẩn bị Sprint 1 — 2026-11-13 (DOCUMENTATION_ONLY)
 

@@ -1,8 +1,8 @@
 # Đề xuất Mở khóa `S1-B` / `S1-C` (`TASK-0004` & `TASK-0005`), Schema Migration `0003` và Gói Quyết định `P0A`..`P0D`
 
-Status: PROPOSED — trình Chủ dự án phê duyệt để chuyển `TASK-0004` (`S1-B`) và `TASK-0005` (`S1-C`) sang `READY`
+Status: ACCEPTED for synthetic DEVTEST only — approved 2026-11-14; historical proposed sections retained as selected options; D-05/D-10 OPEN
 Scope: DEVTEST — mở rộng từ `S1-A` (`TASK-0003` `ACCEPTED`) sang `S1-B` & `S1-C` local/CI synthetic; kèm gói phương án cho `D-01`..`D-04`, `D-07`, `ADR-003`..`005`
-Version: 0.2
+Version: 0.2 (owner-approved; unchanged proposal parameters)
 Prepared: 2026-11-14 (Asia/Ho_Chi_Minh)
 Baseline: main `6751faa4d1100548cddff4ae5efaab30d832047a` (`TASK-0003` `ACCEPTED` tại [PR #6](https://github.com/vannhan091289-ux/baocaobanhang/pull/6); gói đề xuất `S1-B`/`S1-C` v0.1 tại [PR #7](https://github.com/vannhan091289-ux/baocaobanhang/pull/7); điều phối tại [Issue #8](https://github.com/vannhan091289-ux/baocaobanhang/issues/8))
 References:
@@ -15,6 +15,8 @@ References:
 - [tasks/TASK-0006.md](../../tasks/TASK-0006.md) .. [tasks/TASK-0011.md](../../tasks/TASK-0011.md)
 
 ---
+
+Approval: [Owner decision & delegation, 2026-11-14](SPRINT-1-BC-APPROVAL-2026-11-14.md). Phương án A ở mục 4 đã được duyệt cho DEVTEST synthetic, không phải quy định KPI/ngưỡng áp dụng vận hành ngân hàng. Các đoạn hướng dẫn xin phê duyệt ở mục 5 chỉ còn ý nghĩa lịch sử.
 
 ## 1. Mục đích của Tài liệu Đề xuất này
 
