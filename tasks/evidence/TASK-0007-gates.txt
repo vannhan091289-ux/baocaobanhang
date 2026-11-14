@@ -1,0 +1,54 @@
+TASK-0007 (P0B-1) — Gate Evidence
+Branch: feat/TASK-0007-p0b1-sales-plan-activity-log
+Base main SHA: 128be748907b76712df59dced0f3d32b190b8237
+Date: 2026-11-14
+
+1. Database Migration
+- Command: npm run db:migrate:up
+- Target: 127.0.0.1:55432/branch_sales_devtest (PostgreSQL 18.7)
+- Applied: migrations/0005_p0b1_sales_plans_and_activity_logs.sql (exit 0)
+
+2. Format Check
+- Command: npm run format:check
+- Result: PASS (exit 0)
+
+3. Lint
+- Command: npm run lint
+- Result: PASS (exit 0)
+
+4. Typecheck
+- Command: npm run typecheck
+- Result: PASS (exit 0)
+
+5. Unit Tests
+- Command: npm run test:unit
+- Result: PASS — 9/9 files, 34/34 tests (exit 0)
+  Includes tests/unit/p0b1-planning-policy.test.ts (2/2)
+
+6. Integration Tests
+- Command: npm run test:integration
+- Result: PASS — 5/5 files, 33/33 tests (exit 0)
+  Includes tests/integration/p0b1-planning-integration.test.ts
+
+7. Production Build
+- Command: npm run build
+- Result: PASS (exit 0)
+
+8. E2E Tests (Playwright Chromium)
+- Command: npm run test:e2e
+- Result: PASS — 8/8 tests (17.5s, exit 0)
+  Includes P0B-1 AC-05 (/workspace/planning, zero console/page errors, a11y landmarks & keyboard flow)
+
+9. Security & Diff Hygiene
+- Command: npm run security
+- Result: PASS — gitleaks v8.30.1 (48 commits, 0 leaks) + npm audit --audit-level=high (exit 0)
+- Command: git diff --check
+- Result: PASS (exit 0)
+
+10. Break -> Fail -> Restore -> Pass Proof
+- Mutation: src/server/policy.ts line 597 temporarily changed to `if (false && role === "CONFIG_ADMIN")`
+- Break Run: ./node_modules/.bin/vitest run tests/unit/p0b1-planning-policy.test.ts
+- Break Result: FAIL (exit 1) — expected CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN, received DEFAULT_DENY
+- Restore: src/server/policy.ts line 597 restored to `if (role === "CONFIG_ADMIN")`
+- Restore Run: ./node_modules/.bin/vitest run tests/unit/p0b1-planning-policy.test.ts
+- Restore Result: PASS (exit 0) — 1/1 file, 2/2 tests passed

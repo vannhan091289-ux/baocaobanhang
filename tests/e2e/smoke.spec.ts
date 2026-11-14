@@ -513,4 +513,76 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await execContext.close();
     }
   });
+
+  test("P0B-1 AC-05: /workspace/planning Single-Source Activity Log -> Sales Plan & Monday Review Rollup, and CONFIG_ADMIN denial", async ({
+    browser,
+  }) => {
+    const password = getSyntheticPassword();
+    const adminContext = await browser.newContext();
+    const staffContext = await browser.newContext();
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    try {
+      const adminPage = await adminContext.newPage();
+      const staffPage = await staffContext.newPage();
+      for (const p of [adminPage, staffPage]) {
+        p.on("console", (msg) => {
+          if (msg.type() === "error") consoleErrors.push(msg.text());
+        });
+        p.on("pageerror", (err) => {
+          pageErrors.push(err.message);
+        });
+      }
+
+      // 1. CONFIG_ADMIN sees denial notice without 403 console error
+      await adminPage.goto("/auth/login");
+      await adminPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await adminPage.locator("#username").fill("syn.admin01");
+      await adminPage.locator("#password").fill(password);
+      await adminPage.locator("#kc-login").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await adminPage.getByTestId("nav-planning").click();
+      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/planning");
+      await expect(adminPage.getByTestId("planning-denied-box")).toContainText(
+        "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
+      );
+
+      // 2. STAFF logs in, creates a weekly plan, logs a Single-Source Activity, and sees it reflected in Plan & Monday Review rollup
+      await staffPage.goto("/auth/login");
+      await staffPage.waitForURL(/127\.0\.0\.1:8080\/realms\/branch-sales-dev/);
+      await staffPage.locator("#username").fill("syn.staff.khcn");
+      await staffPage.locator("#password").fill(password);
+      await staffPage.locator("#kc-login").click();
+      await staffPage.waitForURL("http://127.0.0.1:3100/workspace");
+
+      await staffPage.getByTestId("nav-planning").click();
+      await staffPage.waitForURL("http://127.0.0.1:3100/workspace/planning");
+
+      await staffPage
+        .getByTestId("input-plan-title")
+        .fill("Kế hoạch E2E Tuần 46 (Synthetic)");
+      await staffPage.getByTestId("submit-create-plan").click();
+      await expect(staffPage.getByTestId("planning-banner")).toContainText(
+        "Đã lưu kế hoạch bán hàng thành công",
+      );
+
+      await staffPage
+        .getByTestId("input-activity-outcome")
+        .fill("Hoạt động E2E một nguồn (Synthetic)");
+      await staffPage.getByTestId("submit-create-activity").click();
+      await expect(staffPage.getByTestId("planning-banner")).toContainText(
+        "Đã ghi nhận hoạt động một nguồn",
+      );
+      await expect(
+        staffPage.getByTestId("rollup-total-SYN-STAFF-KHCN-01"),
+      ).not.toHaveText("0");
+
+      expect(consoleErrors).toEqual([]);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await adminContext.close();
+      await staffContext.close();
+    }
+  });
 });
