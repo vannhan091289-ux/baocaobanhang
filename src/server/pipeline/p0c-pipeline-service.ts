@@ -1401,10 +1401,9 @@ export async function createOpportunity(
         id: string;
         department_id: string;
         owner_staff_id: string;
-      }>(
-        `SELECT id, department_id, owner_staff_id FROM leads WHERE id = $1`,
-        [leadVal],
-      );
+      }>(`SELECT id, department_id, owner_staff_id FROM leads WHERE id = $1`, [
+        leadVal,
+      ]);
       const lRow = parentLead.rows[0];
       const actorRole = actor.ctx.effective_role.role_code;
       const outOfScope =

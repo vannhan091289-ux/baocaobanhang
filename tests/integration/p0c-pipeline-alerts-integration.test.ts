@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { NextRequest } from "next/server";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { SYNTHETIC_USERS } from "../../scripts/seed-s1a.mjs";
@@ -441,37 +442,43 @@ describe("P0C Integration Tests: Pipeline State Machine & 6-Rule In-App Alert En
     }
 
     // L-03b: 403 on bad CSRF token and bad Origin header via route handler
-    const badCsrfReq = new Request(`${cfg.appOrigin}/api/pipeline/prospects`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: cfg.appOrigin,
-        Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
-        "x-csrf-token": "invalid-csrf-token",
+    const badCsrfReq = new NextRequest(
+      `${cfg.appOrigin}/api/pipeline/prospects`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: cfg.appOrigin,
+          Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
+          "x-csrf-token": "invalid-csrf-token",
+        },
+        body: JSON.stringify({
+          prospect_ref: `SYN-L03-CSRF-${randomUUID().slice(0, 6).toUpperCase()}`,
+          display_label: "CSRF Test",
+          segment_code: "SME",
+        }),
       },
-      body: JSON.stringify({
-        prospect_ref: `SYN-L03-CSRF-${randomUUID().slice(0, 6).toUpperCase()}`,
-        display_label: "CSRF Test",
-        segment_code: "SME",
-      }),
-    });
+    );
     const badCsrfRes = await postProspectsRoute(badCsrfReq);
     expect(badCsrfRes.status).toBe(403);
 
-    const badOriginReq = new Request(`${cfg.appOrigin}/api/pipeline/prospects`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: "https://evil.example.com",
-        Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
-        "x-csrf-token": staffKhdn.csrfToken,
+    const badOriginReq = new NextRequest(
+      `${cfg.appOrigin}/api/pipeline/prospects`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://evil.example.com",
+          Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
+          "x-csrf-token": staffKhdn.csrfToken,
+        },
+        body: JSON.stringify({
+          id: khdnPros.data.id,
+          expected_version: khdnPros.data.row_version,
+          stage: "QUALIFIED",
+        }),
       },
-      body: JSON.stringify({
-        id: khdnPros.data.id,
-        expected_version: khdnPros.data.row_version,
-        stage: "QUALIFIED",
-      }),
-    });
+    );
     const badOriginRes = await patchProspectsRoute(badOriginReq);
     expect(badOriginRes.status).toBe(403);
 
@@ -487,20 +494,23 @@ describe("P0C Integration Tests: Pipeline State Machine & 6-Rule In-App Alert En
       `REVOKE INSERT ON TABLE audit_events FROM app_runtime_role`,
     );
     try {
-      const outageReq = new Request(`${cfg.appOrigin}/api/pipeline/prospects`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Origin: cfg.appOrigin,
-          Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
-          "x-csrf-token": staffKhdn.csrfToken,
+      const outageReq = new NextRequest(
+        `${cfg.appOrigin}/api/pipeline/prospects`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: cfg.appOrigin,
+            Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
+            "x-csrf-token": staffKhdn.csrfToken,
+          },
+          body: JSON.stringify({
+            prospect_ref: `SYN-L03-OUTAGE-${randomUUID().slice(0, 6).toUpperCase()}`,
+            display_label: "Outage Rollback Test",
+            segment_code: "SME",
+          }),
         },
-        body: JSON.stringify({
-          prospect_ref: `SYN-L03-OUTAGE-${randomUUID().slice(0, 6).toUpperCase()}`,
-          display_label: "Outage Rollback Test",
-          segment_code: "SME",
-        }),
-      });
+      );
       const outageRes = await postProspectsRoute(outageReq);
       expect(outageRes.status).toBe(500);
     } finally {

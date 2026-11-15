@@ -376,7 +376,12 @@ describe("P0B-2 Integration Tests: KPI Actuals, Reconciliation & Dashboard (TASK
     await migratorPool.query(
       `INSERT INTO staff (id, staff_code, display_name, department_id, status)
        VALUES ($1, $2, $3, $4, 'ACTIVE')`,
-      [tempStaffId, `SYN_H02_${tempStaffId.slice(0, 6).toUpperCase()}`, "H02 Temp Approver", khcnDeptId],
+      [
+        tempStaffId,
+        `SYN_H02_${tempStaffId.slice(0, 6).toUpperCase()}`,
+        "H02 Temp Approver",
+        khcnDeptId,
+      ],
     );
 
     const roleId = randomUUID();
@@ -442,8 +447,12 @@ describe("P0B-2 Integration Tests: KPI Actuals, Reconciliation & Dashboard (TASK
       expect(validAdj.ok).toBe(true);
       if (validAdj.ok) expect(validAdj.data.actual_value).toBe(160);
     } finally {
-      await migratorPool.query(`DELETE FROM role_assignments WHERE id = $1`, [roleId]);
-      await migratorPool.query(`DELETE FROM staff WHERE id = $1`, [tempStaffId]);
+      await migratorPool.query(`DELETE FROM role_assignments WHERE id = $1`, [
+        roleId,
+      ]);
+      await migratorPool.query(`DELETE FROM staff WHERE id = $1`, [
+        tempStaffId,
+      ]);
     }
   });
 });
