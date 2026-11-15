@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { recordDenyAuditSafely } from "./audit";
+import { MAX_JSON_BODY_BYTES, readBoundedJsonBodyText } from "./body-reader";
 import { getRuntimeConfig } from "./config";
 import { constantTimeEqual } from "./crypto";
 import { getRuntimePool } from "./db";
@@ -14,7 +15,6 @@ import {
 import { findTamperHeader, findTamperKey, isPlainObject } from "./validation";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
-const MAX_BODY_BYTES = 16 * 1024;
 
 export interface ApiContext {
   actor: Actor;
@@ -146,14 +146,25 @@ export async function handleApi(
       await denyAudit(actor, action, opts.resourceType, "ORIGIN_MISMATCH");
       return errorResponse(403, "ORIGIN_MISMATCH", "Origin không hợp lệ.");
     }
-    const raw = await request.text();
-    if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) {
+    const bodyRead = await readBoundedJsonBodyText(
+      request,
+      MAX_JSON_BODY_BYTES,
+    );
+    if (!bodyRead.ok) {
+      if (bodyRead.reason === "UNSUPPORTED_MEDIA_TYPE") {
+        return errorResponse(
+          415,
+          "UNSUPPORTED_MEDIA_TYPE",
+          "Chỉ hỗ trợ Content-Type application/json.",
+        );
+      }
       return errorResponse(
         422,
         "VALIDATION_FAILED",
         "Nội dung yêu cầu quá lớn.",
       );
     }
+    const raw = bodyRead.text;
     let parsed: unknown = undefined;
     if (raw.length > 0) {
       try {

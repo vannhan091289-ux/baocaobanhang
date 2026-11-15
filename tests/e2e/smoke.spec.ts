@@ -863,6 +863,17 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       expect(headers["permissions-policy"]).toBe(
         "camera=(), microphone=(), geolocation=()",
       );
+      expect(headers["cross-origin-opener-policy"]).toBe("same-origin");
+      expect(headers["strict-transport-security"]).toBe(
+        "max-age=31536000; includeSubDomains",
+      );
+      expect(headers["content-security-policy"]).toContain(
+        "default-src 'self'",
+      );
+      expect(headers["content-security-policy"]).toContain("object-src 'none'");
+      expect(headers["content-security-policy"]).toContain(
+        "frame-ancestors 'none'",
+      );
       expect(headers["x-powered-by"]).toBeUndefined();
     }
   });
