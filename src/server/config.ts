@@ -33,6 +33,39 @@ const DISALLOWED_RUNTIME_DB_USERS = new Set<string>([
 
 let envLoadedFromDisk = false;
 
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export function parseEnvFileContent(content: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (const rawLine of content.split(/\r?\n/)) {
+    let trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (trimmed.startsWith("export ") || trimmed.startsWith("export\t")) {
+      trimmed = trimmed.slice(6).trimStart();
+    }
+    const idx = trimmed.indexOf("=");
+    if (idx <= 0) {
+      continue;
+    }
+    const key = trimmed.slice(0, idx).trim();
+    if (!ENV_KEY_PATTERN.test(key)) {
+      continue;
+    }
+    let val = trimmed.slice(idx + 1).trim();
+    if (
+      val.length >= 2 &&
+      ((val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'")))
+    ) {
+      val = val.slice(1, -1);
+    }
+    parsed[key] = val;
+  }
+  return parsed;
+}
+
 export function ensureDevtestEnvLoaded(): void {
   if (envLoadedFromDisk) {
     return;
@@ -43,17 +76,8 @@ export function ensureDevtestEnvLoaded(): void {
     return;
   }
   const content = readFileSync(localEnvPath, "utf8");
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-    const idx = trimmed.indexOf("=");
-    if (idx <= 0) {
-      continue;
-    }
-    const key = trimmed.slice(0, idx).trim();
-    const val = trimmed.slice(idx + 1).trim();
+  const entries = parseEnvFileContent(content);
+  for (const [key, val] of Object.entries(entries)) {
     if (process.env[key] === undefined) {
       process.env[key] = val;
     }
