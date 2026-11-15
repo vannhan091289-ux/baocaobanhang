@@ -25,6 +25,7 @@ import {
   establishSessionFromVerifiedOidcIdentity,
   SESSION_COOKIE_NAME,
 } from "@/server/session";
+import { GET as getAuditEventsRoute } from "@/app/api/audit-events/route";
 import {
   PATCH as patchProspectsRoute,
   POST as postProspectsRoute,
@@ -537,5 +538,113 @@ describe("P0C Integration Tests: Pipeline State Machine & 6-Rule In-App Alert En
       ).rows[0]!.c,
     );
     expect(afterCount).toBe(beforeCount);
+  });
+
+  it("escalates overdue OPEN alerts to active DEPARTMENT_MANAGER/EXECUTIVE and logs alerts.escalate audit (M-05)", async () => {
+    const execActor = await makeActorForUserKey("exec01");
+    const staffKhcnActor = await makeActorForUserKey("staff_khcn");
+    const mgrKhcnActor = await makeActorForUserKey("mgr_khcn");
+
+    const alertId = randomUUID();
+    const dedupKey = `M05-ESC-${randomUUID().slice(0, 8)}`;
+    await migratorPool.query(
+      `INSERT INTO in_app_alerts (
+         id, rule_code, dedup_key, severity, target_scope,
+         department_id, owner_staff_id, title, summary,
+         created_at, resolution_status
+       ) VALUES (
+         $1, 'OVERDUE_PIPELINE_FOLLOWUP', $4, 'P0', 'SELF',
+         $2, $3, 'M05 Test Overdue Alert', 'Should escalate after SLA',
+         NOW() - INTERVAL '14 days', 'OPEN'
+       )`,
+      [
+        alertId,
+        staffKhcnActor.ctx.department.id,
+        staffKhcnActor.ctx.staff_id,
+        dedupKey,
+      ],
+    );
+    createdAlertIds.push(alertId);
+
+    const evalRes = await evaluateP0Alerts(execActor, {
+      as_of_date: "2026-11-14",
+      period_key: "2026-11",
+    });
+    expect(evalRes.ok).toBe(true);
+    if (!evalRes.ok) return;
+    expect(evalRes.data.escalated_count).toBeGreaterThanOrEqual(1);
+
+    const updated = await migratorPool.query<{
+      escalated_to_staff_id: string | null;
+    }>(`SELECT escalated_to_staff_id FROM in_app_alerts WHERE id = $1`, [
+      alertId,
+    ]);
+    expect(updated.rows[0]?.escalated_to_staff_id).toBe(
+      mgrKhcnActor.ctx.staff_id,
+    );
+
+    const escAudit = await migratorPool.query<{ c: string }>(
+      `SELECT count(*)::text AS c
+       FROM audit_events
+       WHERE action = 'alerts.escalate'
+         AND decision = 'ALLOW'
+         AND resource_id = $1`,
+      [alertId],
+    );
+    expect(Number(escAudit.rows[0]!.c)).toBe(1);
+  });
+
+  it("enforces read-only audit_events access control on GET /api/audit-events (M-06)", async () => {
+    const adminActor = await makeActorForUserKey("admin01");
+    const execActor = await makeActorForUserKey("exec01");
+    const mgrKhcnActor = await makeActorForUserKey("mgr_khcn");
+    const staffKhcnActor = await makeActorForUserKey("staff_khcn");
+
+    for (const allowedActor of [adminActor, execActor]) {
+      const req = new NextRequest(
+        `${cfg.appOrigin}/api/audit-events?limit=10`,
+        {
+          method: "GET",
+          headers: {
+            Cookie: `${SESSION_COOKIE_NAME}=${allowedActor.rawSessionToken}`,
+          },
+        },
+      );
+      const res = await getAuditEventsRoute(req);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: { items: unknown[]; privilege_restricted: boolean };
+        page: { limit: number; offset: number; total: number };
+      };
+      expect(Array.isArray(body.data.items)).toBe(true);
+      expect(body.data.privilege_restricted).toBe(true);
+    }
+
+    for (const forbiddenActor of [mgrKhcnActor, staffKhcnActor]) {
+      const req = new NextRequest(
+        `${cfg.appOrigin}/api/audit-events?limit=10`,
+        {
+          method: "GET",
+          headers: {
+            Cookie: `${SESSION_COOKIE_NAME}=${forbiddenActor.rawSessionToken}`,
+          },
+        },
+      );
+      const res = await getAuditEventsRoute(req);
+      expect(res.status).toBe(403);
+    }
+
+    // Tamper query param -> 403
+    const tamperReq = new NextRequest(
+      `${cfg.appOrigin}/api/audit-events?actor_staff_id=00000000-0000-4000-8000-000000000001`,
+      {
+        method: "GET",
+        headers: {
+          Cookie: `${SESSION_COOKIE_NAME}=${execActor.rawSessionToken}`,
+        },
+      },
+    );
+    const tamperRes = await getAuditEventsRoute(tamperReq);
+    expect(tamperRes.status).toBe(403);
   });
 });

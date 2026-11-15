@@ -1,10 +1,82 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import type {
   DashboardOverviewPayload,
   KpiActualRow,
 } from "@/server/kpi/p0b2-service";
+
+interface DrilldownDepartmentNode {
+  id: string;
+  code: string;
+  name: string;
+  staff_count: number;
+  customer_count: number;
+  opportunity_count: number;
+  open_alert_count: number;
+}
+
+interface DrilldownStaffNode {
+  id: string;
+  staff_code: string;
+  display_name: string;
+  department_id: string;
+  department_code: string;
+  customer_count: number;
+  activity_count: number;
+  opportunity_count: number;
+}
+
+interface DrilldownResultPayload {
+  level: "BRANCH" | "DEPARTMENT" | "STAFF" | "ITEM";
+  period_key: string;
+  departments: DrilldownDepartmentNode[];
+  staff_nodes: DrilldownStaffNode[];
+  items: {
+    customers: Array<{
+      id: string;
+      customer_ref_code: string;
+      display_name: string;
+      segment_code: string;
+    }>;
+    opportunities: Array<{
+      id: string;
+      opportunity_ref: string;
+      display_label: string;
+      stage: string;
+      estimated_value: number;
+    }>;
+    kpi_actuals: Array<{
+      id: string;
+      metric_code: string;
+      actual_value: number | null;
+      data_state: string;
+      reconciliation_status: string;
+    }>;
+  };
+}
+
+interface StaffFocusActivity {
+  id: string;
+  activity_date: string;
+  activity_type: string;
+  summary: string;
+}
+
+interface StaffFocusLead {
+  id: string;
+  lead_ref: string;
+  display_label: string;
+  stage: string;
+}
+
+interface StaffFocusCustomer {
+  id: string;
+  customer_ref_code: string;
+  display_name: string;
+  segment_code: string;
+}
 
 interface Props {
   actorRoleCode: string;
@@ -50,6 +122,23 @@ export function DashboardPanel({
   const [formIsMissing, setFormIsMissing] = useState(false);
   const [formSourceRef, setFormSourceRef] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Interactive drill-down (P0D /api/dashboard/drilldown)
+  const [drilldown, setDrilldown] = useState<DrilldownResultPayload | null>(
+    null,
+  );
+  const [drilldownLabel, setDrilldownLabel] = useState<string>("");
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+  const [drilldownError, setDrilldownError] = useState<string | null>(null);
+
+  // STAFF focus block (priorities / appointments / leads / customers)
+  const [staffActivities, setStaffActivities] = useState<StaffFocusActivity[]>(
+    [],
+  );
+  const [staffLeads, setStaffLeads] = useState<StaffFocusLead[]>([]);
+  const [staffCustomers, setStaffCustomers] = useState<StaffFocusCustomer[]>(
+    [],
+  );
 
   const loadData = useCallback(async () => {
     if (isConfigAdmin) {
@@ -99,12 +188,84 @@ export function DashboardPanel({
           setFormDefId(defs[0].id);
         }
       }
+
+      if (actorRoleCode === "STAFF") {
+        const [focusActRes, focusLeadRes, focusCustRes] = await Promise.all([
+          fetch("/api/planning/activities?limit=5"),
+          fetch("/api/pipeline/leads?limit=5"),
+          fetch("/api/customers?limit=5"),
+        ]);
+        if (focusActRes.ok) {
+          const j = (await focusActRes.json()) as {
+            data?: StaffFocusActivity[];
+          };
+          setStaffActivities(j.data ?? []);
+        }
+        if (focusLeadRes.ok) {
+          const j = (await focusLeadRes.json()) as { data?: StaffFocusLead[] };
+          setStaffLeads(j.data ?? []);
+        }
+        if (focusCustRes.ok) {
+          const j = (await focusCustRes.json()) as {
+            data?: StaffFocusCustomer[];
+          };
+          setStaffCustomers(j.data ?? []);
+        }
+      }
     } catch {
       setErrorMsg("Không thể kết nối máy chủ để tải dữ liệu Dashboard.");
     } finally {
       setLoading(false);
     }
-  }, [asOfDate, formDefId, groupFilter, isConfigAdmin, periodKey, periodType]);
+  }, [
+    actorRoleCode,
+    asOfDate,
+    formDefId,
+    groupFilter,
+    isConfigAdmin,
+    periodKey,
+    periodType,
+  ]);
+
+  const loadDrilldown = useCallback(
+    async (opts: {
+      level: "BRANCH" | "DEPARTMENT" | "STAFF";
+      department_id?: string;
+      staff_id?: string;
+      label: string;
+    }) => {
+      setDrilldownLoading(true);
+      setDrilldownError(null);
+      setDrilldownLabel(opts.label);
+      try {
+        const qs = new URLSearchParams({
+          level: opts.level,
+          period_key: periodKey,
+        });
+        if (opts.department_id) qs.set("department_id", opts.department_id);
+        if (opts.staff_id) qs.set("staff_id", opts.staff_id);
+        const res = await fetch(`/api/dashboard/drilldown?${qs.toString()}`, {
+          cache: "no-store",
+        });
+        const json = (await res.json()) as {
+          data?: DrilldownResultPayload;
+          error?: { message?: string };
+        };
+        if (!res.ok || !json.data) {
+          setDrilldownError(
+            json.error?.message ?? `Không thể tải drill-down (${res.status})`,
+          );
+          return;
+        }
+        setDrilldown(json.data);
+      } catch {
+        setDrilldownError("Lỗi kết nối khi tải dữ liệu drill-down.");
+      } finally {
+        setDrilldownLoading(false);
+      }
+    },
+    [periodKey],
+  );
 
   useEffect(() => {
     void Promise.resolve().then(() => loadData());
@@ -443,6 +604,242 @@ export function DashboardPanel({
         )}
       </section>
 
+      {overview ? (
+        <section
+          className="scaffold-card"
+          aria-labelledby="completion-chart-heading"
+          data-testid="dashboard-completion-chart"
+        >
+          <h2 id="completion-chart-heading">
+            Biểu đồ Tiến độ Hoàn thành KPI so với Kỳ vọng (
+            {overview.expected_progress_pct !== null
+              ? `${overview.expected_progress_pct}%`
+              : "N/A"}
+            )
+          </h2>
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            {overview.groups
+              .flatMap((g) => g.metrics)
+              .filter((m) => m.completion_pct !== null)
+              .slice(0, 8)
+              .map((m) => {
+                const pct = Math.max(0, Math.min(100, m.completion_pct ?? 0));
+                const targetPace = overview.expected_progress_pct ?? 100;
+                const onTrack = (m.completion_pct ?? 0) >= targetPace;
+                return (
+                  <div key={m.kpi_definition_id}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: "0.9rem",
+                        marginBottom: "0.2rem",
+                      }}
+                    >
+                      <span>
+                        <strong>{m.metric_code}</strong> — {m.metric_name}
+                      </span>
+                      <span>
+                        {m.completion_pct}%
+                        {overview.expected_progress_pct !== null
+                          ? ` (kỳ vọng ${overview.expected_progress_pct}%)`
+                          : ""}
+                      </span>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-label={`Tiến độ ${m.metric_code}`}
+                      aria-valuenow={Math.round(pct)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      style={{
+                        height: "0.6rem",
+                        background: "#e5e7eb",
+                        borderRadius: "4px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${pct}%`,
+                          height: "100%",
+                          background: onTrack ? "#15803d" : "#b45309",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            {overview.groups
+              .flatMap((g) => g.metrics)
+              .every((m) => m.completion_pct === null) ? (
+              <p className="scaffold-meta">
+                Chưa có chỉ tiêu đủ cả Target và Actual trong kỳ để vẽ biểu đồ.
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {actorRoleCode === "STAFF" ? (
+        <section
+          className="scaffold-card"
+          aria-labelledby="staff-daily-focus-heading"
+          data-testid="staff-daily-focus"
+        >
+          <h2 id="staff-daily-focus-heading">
+            Ưu tiên Trong ngày, Lịch hẹn &amp; Lead / Khách hàng (STAFF)
+          </h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "1rem",
+            }}
+          >
+            <div>
+              <h3>Lịch hẹn &amp; Hoạt động gần nhất</h3>
+              {staffActivities.length === 0 ? (
+                <p className="scaffold-meta">Chưa có hoạt động bán hàng.</p>
+              ) : (
+                <ul>
+                  {staffActivities.map((a) => (
+                    <li key={a.id}>
+                      <strong>{a.activity_date}</strong> [{a.activity_type}]{" "}
+                      {a.summary}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link className="scaffold-link" href="/workspace/planning">
+                Mở Kế hoạch Bán hàng
+              </Link>
+            </div>
+            <div>
+              <h3>Lead đang phụ trách</h3>
+              {staffLeads.length === 0 ? (
+                <p className="scaffold-meta">Chưa có Lead.</p>
+              ) : (
+                <ul>
+                  {staffLeads.map((l) => (
+                    <li key={l.id}>
+                      <code>{l.lead_ref}</code> — {l.display_label} ({l.stage})
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link className="scaffold-link" href="/workspace/pipeline">
+                Mở Pipeline Lead
+              </Link>
+            </div>
+            <div>
+              <h3>Khách hàng được phân công</h3>
+              {staffCustomers.length === 0 ? (
+                <p className="scaffold-meta">Chưa có Khách hàng.</p>
+              ) : (
+                <ul>
+                  {staffCustomers.map((c) => (
+                    <li key={c.id}>
+                      <code>{c.customer_ref_code}</code> — {c.display_name} (
+                      {c.segment_code})
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link className="scaffold-link" href="/workspace/customers">
+                Mở Customer 360
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section
+        className="scaffold-card"
+        aria-labelledby="interactive-drilldown-heading"
+      >
+        <h2 id="interactive-drilldown-heading">
+          Drill-down Tương tác Chi tiết (KPI / Khách hàng / Cơ hội)
+        </h2>
+        <div style={{ marginBottom: "0.75rem" }}>
+          <button
+            type="button"
+            className="scaffold-button"
+            data-testid="dashboard-drilldown-load"
+            disabled={drilldownLoading}
+            onClick={() =>
+              void loadDrilldown({
+                level:
+                  actorRoleCode === "STAFF"
+                    ? "STAFF"
+                    : actorRoleCode === "DEPARTMENT_MANAGER"
+                      ? "DEPARTMENT"
+                      : "BRANCH",
+                label: `Tổng quan phạm vi ${actorRoleCode}`,
+              })
+            }
+          >
+            {drilldownLoading
+              ? "Đang tải drill-down..."
+              : "Tải Drill-down Chi tiết"}
+          </button>
+        </div>
+
+        {drilldownError ? (
+          <p role="alert" style={{ color: "#b91c1c" }}>
+            {drilldownError}
+          </p>
+        ) : null}
+
+        {drilldown ? (
+          <div data-testid="dashboard-drilldown-result">
+            <p className="scaffold-meta">
+              Phạm vi đang xem: <strong>{drilldownLabel}</strong> (Cấp{" "}
+              <code>{drilldown.level}</code> • Kỳ{" "}
+              <code>{drilldown.period_key}</code>)
+            </p>
+            <div
+              tabIndex={0}
+              role="region"
+              aria-labelledby="interactive-drilldown-heading"
+              className="table-wrapper"
+              style={{ overflowX: "auto" }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th scope="col">Phòng ban</th>
+                    <th scope="col">Nhân sự</th>
+                    <th scope="col">Khách hàng</th>
+                    <th scope="col">Cơ hội</th>
+                    <th scope="col">Cảnh báo mở</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {drilldown.departments.map((d) => (
+                    <tr key={d.id}>
+                      <td>
+                        {d.code} — {d.name}
+                      </td>
+                      <td>{d.staff_count}</td>
+                      <td>{d.customer_count}</td>
+                      <td>{d.opportunity_count}</td>
+                      <td>{d.open_alert_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="scaffold-meta" style={{ marginTop: "0.5rem" }}>
+              Nhân sự trong phạm vi: {drilldown.staff_nodes.length} • Khách hàng
+              chi tiết: {drilldown.items.customers.length} • Cơ hội:{" "}
+              {drilldown.items.opportunities.length} • Bản ghi Actual:{" "}
+              {drilldown.items.kpi_actuals.length}
+            </p>
+          </div>
+        ) : null}
+      </section>
+
       {overview && overview.drilldown_departments.length > 0 ? (
         <section
           className="scaffold-card"
@@ -456,7 +853,21 @@ export function DashboardPanel({
                   {d.entity_code} — {d.entity_name}
                 </strong>{" "}
                 ({d.metrics_with_data} có số liệu, {d.metrics_missing_data}{" "}
-                khuyết)
+                khuyết){" "}
+                <button
+                  type="button"
+                  className="scaffold-button"
+                  data-testid={`drilldown-dept-${d.entity_code}`}
+                  onClick={() =>
+                    void loadDrilldown({
+                      level: "DEPARTMENT",
+                      department_id: d.entity_id,
+                      label: `${d.entity_code} — ${d.entity_name}`,
+                    })
+                  }
+                >
+                  Xem chi tiết
+                </button>
               </li>
             ))}
           </ul>
@@ -476,7 +887,21 @@ export function DashboardPanel({
                   {s.entity_code} — {s.entity_name}
                 </strong>{" "}
                 ({s.metrics_with_data} có số liệu, {s.metrics_missing_data}{" "}
-                khuyết)
+                khuyết){" "}
+                <button
+                  type="button"
+                  className="scaffold-button"
+                  data-testid={`drilldown-staff-${s.entity_code}`}
+                  onClick={() =>
+                    void loadDrilldown({
+                      level: "STAFF",
+                      staff_id: s.entity_id,
+                      label: `${s.entity_code} — ${s.entity_name}`,
+                    })
+                  }
+                >
+                  Xem chi tiết
+                </button>
               </li>
             ))}
           </ul>

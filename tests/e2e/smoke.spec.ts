@@ -542,8 +542,8 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await adminPage.locator("#kc-login").click();
       await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
 
-      await adminPage.getByTestId("nav-planning").click();
-      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/planning");
+      await expect(adminPage.getByTestId("nav-planning")).toHaveCount(0);
+      await adminPage.goto("http://127.0.0.1:3100/workspace/planning");
       await expect(adminPage.getByTestId("planning-denied-box")).toContainText(
         "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
       );
@@ -614,8 +614,8 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await adminPage.locator("#kc-login").click();
       await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
 
-      await adminPage.getByTestId("nav-dashboard").click();
-      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/dashboard");
+      await expect(adminPage.getByTestId("nav-dashboard")).toHaveCount(0);
+      await adminPage.goto("http://127.0.0.1:3100/workspace/dashboard");
       await expect(adminPage.getByTestId("dashboard-denied-box")).toContainText(
         "CONFIG_ADMIN_BUSINESS_DATA_FORBIDDEN",
       );
@@ -668,8 +668,8 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await adminPage.locator("#kc-login").click();
       await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
 
-      await adminPage.getByTestId("nav-pipeline").click();
-      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/pipeline");
+      await expect(adminPage.getByTestId("nav-pipeline")).toHaveCount(0);
+      await adminPage.goto("http://127.0.0.1:3100/workspace/pipeline");
       await expect(adminPage.getByTestId("pipeline-denied-box")).toBeVisible();
 
       await adminPage.goto("http://127.0.0.1:3100/workspace/alerts");
@@ -735,8 +735,8 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await adminPage.locator("#kc-login").click();
       await adminPage.waitForURL("http://127.0.0.1:3100/workspace");
 
-      await adminPage.getByTestId("nav-customers").click();
-      await adminPage.waitForURL("http://127.0.0.1:3100/workspace/customers");
+      await expect(adminPage.getByTestId("nav-customers")).toHaveCount(0);
+      await adminPage.goto("http://127.0.0.1:3100/workspace/customers");
       await expect(adminPage.getByTestId("customers-denied-box")).toBeVisible();
 
       await staffPage.goto("/auth/login");
@@ -806,6 +806,14 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await execPage.locator("#kc-login").click();
       await execPage.waitForURL("http://127.0.0.1:3100/workspace");
 
+      // Verify 5 navigation groups + audit viewer on /workspace for EXECUTIVE
+      await expect(execPage.getByTestId("nav-group-overview")).toBeVisible();
+      await expect(execPage.getByTestId("nav-group-kpi")).toBeVisible();
+      await expect(execPage.getByTestId("nav-group-planning")).toBeVisible();
+      await expect(execPage.getByTestId("nav-group-customers")).toBeVisible();
+      await expect(execPage.getByTestId("nav-group-admin")).toBeVisible();
+      await expect(execPage.getByTestId("audit-events-panel")).toBeVisible();
+
       const execRoutes: Array<{ testId: string; url: string }> = [
         { testId: "nav-kpi-targets", url: "/workspace/kpi-targets" },
         { testId: "nav-planning", url: "/workspace/planning" },
@@ -822,9 +830,16 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
         await expect(execPage.locator("h1")).toBeVisible();
       }
 
-      // Verify Dashboard overview + drilldown render on BRANCH_EXEC
+      // Verify Dashboard overview + chart + interactive drilldown render on BRANCH_EXEC
       await execPage.goto("/workspace/dashboard");
       await expect(execPage.getByTestId("dashboard-groups")).toBeVisible();
+      await expect(
+        execPage.getByTestId("dashboard-completion-chart"),
+      ).toBeVisible();
+      await execPage.getByTestId("dashboard-drilldown-load").click();
+      await expect(
+        execPage.getByTestId("dashboard-drilldown-result"),
+      ).toBeVisible();
 
       // 2. STAFF (syn.staff.khcn) walks self-scoped navigation
       await staffPage.goto("/auth/login");
@@ -834,12 +849,21 @@ test.describe("Sprint 1 (S1-A) HTTP, OIDC Browser Auth, Self-Context & Logout E2
       await staffPage.locator("#kc-login").click();
       await staffPage.waitForURL("http://127.0.0.1:3100/workspace");
 
+      await expect(staffPage.getByTestId("audit-events-panel")).toHaveCount(0);
+
       for (const route of execRoutes) {
         await staffPage.goto("/workspace");
         await staffPage.getByTestId(route.testId).click();
         await staffPage.waitForURL(`http://127.0.0.1:3100${route.url}`);
         await expect(staffPage.locator("h1")).toBeVisible();
       }
+
+      await staffPage.goto("/workspace/dashboard");
+      await expect(staffPage.getByTestId("staff-daily-focus")).toBeVisible();
+      await staffPage.getByTestId("dashboard-drilldown-load").click();
+      await expect(
+        staffPage.getByTestId("dashboard-drilldown-result"),
+      ).toBeVisible();
 
       expect(consoleErrors).toEqual([]);
       expect(pageErrors).toEqual([]);

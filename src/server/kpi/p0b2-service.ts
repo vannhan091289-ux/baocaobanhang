@@ -1275,25 +1275,44 @@ export async function getDashboardOverview(
     groupParam ? [groupParam] : [],
   );
 
+  const sqlDeptScope = viewerScope === "SELF" ? null : scopedDeptId;
+  const sqlStaffScope = viewerScope === "SELF" ? actor.ctx.staff_id : null;
+  const sqlDeptRowScope =
+    viewerScope === "SELF" ? actor.ctx.department.id : scopedDeptId;
+
   const tgtRes = await pool.query(
     `SELECT kpi_definition_id, scope_type, department_id, staff_id, target_value, status
      FROM kpi_targets
      WHERE period_type = $1 AND period_key = $2 AND status IN ('APPROVED', 'PENDING_APPROVAL', 'DRAFT')
+       AND ($3::uuid IS NULL OR department_id = $3)
+       AND ($4::uuid IS NULL OR staff_id = $4)
      ORDER BY CASE status WHEN 'APPROVED' THEN 1 WHEN 'PENDING_APPROVAL' THEN 2 ELSE 3 END ASC, revision_no DESC`,
-    [periodType, periodKey],
+    [periodType, periodKey, sqlDeptScope, sqlStaffScope],
   );
 
   const actRes = await pool.query(
-    `SELECT id, kpi_definition_id, as_of_date, department_id, primary_staff_id,
-            referrer_staff_id, actual_value, reconciliation_status, source_code
-     FROM kpi_actual_records
-     WHERE period_type = $1 AND period_key = $2 AND as_of_date <= $3
-     ORDER BY as_of_date ASC`,
-    [periodType, periodKey, asOfDate],
+    `SELECT a.id, a.kpi_definition_id, a.as_of_date, a.department_id, a.primary_staff_id,
+            a.referrer_staff_id, ref_s.department_id AS referrer_department_id,
+            a.actual_value, a.reconciliation_status, a.source_code
+     FROM kpi_actual_records a
+     LEFT JOIN staff ref_s ON ref_s.id = a.referrer_staff_id
+     WHERE a.period_type = $1 AND a.period_key = $2 AND a.as_of_date <= $3
+       AND ($4::uuid IS NULL OR a.department_id = $4 OR a.referrer_staff_id IN (
+         SELECT id FROM staff WHERE department_id = $4 AND status = 'ACTIVE'
+       ))
+       AND ($5::uuid IS NULL OR a.primary_staff_id = $5 OR a.referrer_staff_id = $5)
+     ORDER BY a.as_of_date ASC`,
+    [periodType, periodKey, asOfDate, sqlDeptScope, sqlStaffScope],
   );
 
   const staffRes = await pool.query(
-    `SELECT id, staff_code, display_name, department_id FROM staff WHERE status = 'ACTIVE' ORDER BY staff_code ASC`,
+    `SELECT id, staff_code, display_name, department_id
+     FROM staff
+     WHERE status = 'ACTIVE'
+       AND ($1::uuid IS NULL OR department_id = $1)
+       AND ($2::uuid IS NULL OR id = $2)
+     ORDER BY staff_code ASC`,
+    [sqlDeptScope, sqlStaffScope],
   );
   const staffDeptMap = new Map<string, string>();
   const staffList: Array<{
@@ -1313,9 +1332,22 @@ export async function getDashboardOverview(
       department_id: deptId,
     });
   }
+  for (const a of actRes.rows) {
+    if (a.referrer_staff_id && a.referrer_department_id) {
+      staffDeptMap.set(
+        String(a.referrer_staff_id),
+        String(a.referrer_department_id),
+      );
+    }
+  }
 
   const deptRes = await pool.query(
-    `SELECT id, code, name FROM departments WHERE status = 'ACTIVE' ORDER BY code ASC`,
+    `SELECT id, code, name
+     FROM departments
+     WHERE status = 'ACTIVE'
+       AND ($1::uuid IS NULL OR id = $1)
+     ORDER BY code ASC`,
+    [sqlDeptRowScope],
   );
   const deptList = deptRes.rows.map((d) => ({
     id: String(d.id),

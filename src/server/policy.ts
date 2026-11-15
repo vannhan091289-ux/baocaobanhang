@@ -46,7 +46,8 @@ export type PolicyAction =
   | "alerts.resolve"
   | "customer360.read"
   | "customer360.write"
-  | "dashboard.drilldown.read";
+  | "dashboard.drilldown.read"
+  | "audit.read";
 
 export interface DepartmentRecord {
   id: string;
@@ -904,6 +905,21 @@ export function evaluateActionAuthorization(
         reasonCode: "ALLOW_SELF_SCOPE",
       };
     }
+  }
+
+  if (action === "audit.read") {
+    if (role === "CONFIG_ADMIN" || role === "EXECUTIVE") {
+      return {
+        decision: "ALLOW",
+        httpStatus: 200,
+        reasonCode: "ALLOW_AUDIT_READ",
+      };
+    }
+    return {
+      decision: "DENY",
+      httpStatus: 403,
+      reasonCode: "ACTION_FORBIDDEN_FOR_ROLE",
+    };
   }
 
   return {
