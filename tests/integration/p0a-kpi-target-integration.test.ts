@@ -690,4 +690,151 @@ describe("P0A Integration Tests: 7-Group KPI Dictionary, Working Calendar & Targ
     );
     expect(afterTargetCount).toBe(beforeTargetCount);
   });
+
+  it("enforces SoD for EXECUTIVE approveKpiTarget (H-01) and department scope on parent_target_id (L-01)", async () => {
+    const execActor = await makeActorForUserKey("exec01");
+    const mgrKhcnActor = await makeActorForUserKey("mgr_khcn");
+
+    // H-01: EXECUTIVE creates a PENDING_APPROVAL target (no approval_ref / governance_ref)
+    const execProposeRes = await postTargetsRoute(
+      makeAuthRequest("/api/kpi/targets", {
+        method: "POST",
+        actor: execActor,
+        body: {
+          kpi_definition_id: "55555555-5555-4555-8555-555555555501",
+          period_type: "MONTH",
+          period_key: "2026-12",
+          target_scope: "BRANCH",
+          target_value: "123456.00",
+        },
+      }),
+    );
+    expect(execProposeRes.status).toBe(201);
+    const execProposeBody = (await execProposeRes.json()) as {
+      data: { id: string; status: string; row_version: number };
+    };
+    expect(execProposeBody.data.status).toBe("PENDING_APPROVAL");
+    createdTargetIds.push(execProposeBody.data.id);
+
+    // EXECUTIVE self-approving own proposed target -> 403 SEPARATION_OF_DUTIES_VIOLATION + AuditEvent
+    const selfApproveRes = await postApproveTargetRoute(
+      makeAuthRequest(`/api/kpi/targets/${execProposeBody.data.id}/approve`, {
+        method: "POST",
+        actor: execActor,
+        body: {
+          governance_ref: "H01-SELF-APPROVE",
+          expected_version: execProposeBody.data.row_version,
+        },
+      }),
+      { params: Promise.resolve({ id: execProposeBody.data.id }) },
+    );
+    expect(selfApproveRes.status).toBe(403);
+    const selfApproveBody = (await selfApproveRes.json()) as {
+      error: { code: string };
+    };
+    expect(selfApproveBody.error.code).toBe("SEPARATION_OF_DUTIES_VIOLATION");
+
+    const denyAuditRes = await migratorPool.query<{
+      action: string;
+      decision: string;
+      reason_code: string;
+    }>(
+      `SELECT action, decision, reason_code
+       FROM audit_events
+       WHERE resource_id = $1 AND action = 'kpi.target.approve' AND decision = 'DENY'
+       ORDER BY occurred_at DESC LIMIT 1`,
+      [execProposeBody.data.id],
+    );
+    expect(denyAuditRes.rowCount).toBe(1);
+    expect(denyAuditRes.rows[0]!.reason_code).toBe(
+      "SEPARATION_OF_DUTIES_VIOLATION",
+    );
+
+    // EXECUTIVE approving target proposed by someone else (mgr.khcn) -> 200 APPROVED
+    const mgrProposeRes = await postTargetsRoute(
+      makeAuthRequest("/api/kpi/targets", {
+        method: "POST",
+        actor: mgrKhcnActor,
+        body: {
+          kpi_definition_id: "55555555-5555-4555-8555-555555555501",
+          period_type: "MONTH",
+          period_key: "2026-12",
+          target_scope: "DEPARTMENT",
+          department_id: SYNTHETIC_DEPARTMENTS.KHCN.id,
+          target_value: "50000.00",
+          governance_ref: "H01-MGR-PROPOSE",
+        },
+      }),
+    );
+    expect(mgrProposeRes.status).toBe(201);
+    const mgrProposeBody = (await mgrProposeRes.json()) as {
+      data: { id: string; row_version: number };
+    };
+    createdTargetIds.push(mgrProposeBody.data.id);
+
+    const execApproveOtherRes = await postApproveTargetRoute(
+      makeAuthRequest(`/api/kpi/targets/${mgrProposeBody.data.id}/approve`, {
+        method: "POST",
+        actor: execActor,
+        body: {
+          governance_ref: "H01-EXEC-APPROVE-OTHER",
+          expected_version: mgrProposeBody.data.row_version,
+        },
+      }),
+      { params: Promise.resolve({ id: mgrProposeBody.data.id }) },
+    );
+    expect(execApproveOtherRes.status).toBe(200);
+    const execApproveOtherBody = (await execApproveOtherRes.json()) as {
+      data: { status: string };
+    };
+    expect(execApproveOtherBody.data.status).toBe("APPROVED");
+
+    // L-01: DEPARTMENT_MANAGER cannot link parent_target_id from another department (KHDN)
+    const khdnTargetRes = await postTargetsRoute(
+      makeAuthRequest("/api/kpi/targets", {
+        method: "POST",
+        actor: execActor,
+        body: {
+          kpi_definition_id: "55555555-5555-4555-8555-555555555501",
+          period_type: "MONTH",
+          period_key: "2026-12",
+          target_scope: "DEPARTMENT",
+          department_id: SYNTHETIC_DEPARTMENTS.KHDN.id,
+          target_value: "75000.00",
+          governance_ref: "L01-KHDN-PARENT",
+        },
+      }),
+    );
+    expect(khdnTargetRes.status).toBe(201);
+    const khdnTargetBody = (await khdnTargetRes.json()) as {
+      data: { id: string };
+    };
+    createdTargetIds.push(khdnTargetBody.data.id);
+
+    const staffKhcn = SYNTHETIC_USERS.find((u) => u.key === "staff_khcn")!;
+    const crossDeptParentRes = await postTargetsRoute(
+      makeAuthRequest("/api/kpi/targets", {
+        method: "POST",
+        actor: mgrKhcnActor,
+        body: {
+          kpi_definition_id: "55555555-5555-4555-8555-555555555501",
+          period_type: "MONTH",
+          period_key: "2026-12",
+          target_scope: "SELF",
+          department_id: SYNTHETIC_DEPARTMENTS.KHCN.id,
+          staff_id: staffKhcn.staff!.id,
+          parent_target_id: khdnTargetBody.data.id,
+          target_value: "10000.00",
+          governance_ref: "L01-CROSS-DEPT-CHILD",
+        },
+      }),
+    );
+    expect(crossDeptParentRes.status).toBe(404);
+    const crossDeptParentBody = (await crossDeptParentRes.json()) as {
+      error: { code: string };
+    };
+    expect(crossDeptParentBody.error.code).toBe(
+      "PARENT_TARGET_NOT_FOUND_OR_MISMATCH",
+    );
+  });
 });
