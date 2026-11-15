@@ -16,6 +16,42 @@ import { findTamperHeader, findTamperKey, isPlainObject } from "./validation";
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 const MAX_BODY_BYTES = 16 * 1024;
 
+export async function readBoundedBodyText(
+  request: Request,
+  maxBytes: number,
+): Promise<{ ok: true; text: string } | { ok: false }> {
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader !== null) {
+    const declared = Number(contentLengthHeader);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      return { ok: false };
+    }
+  }
+  if (!request.body) {
+    return { ok: true, text: "" };
+  }
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          return { ok: false };
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return { ok: true, text: Buffer.concat(chunks, total).toString("utf8") };
+}
+
 export interface ApiContext {
   actor: Actor;
   url: URL;
@@ -146,14 +182,26 @@ export async function handleApi(
       await denyAudit(actor, action, opts.resourceType, "ORIGIN_MISMATCH");
       return errorResponse(403, "ORIGIN_MISMATCH", "Origin không hợp lệ.");
     }
-    const raw = await request.text();
-    if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) {
+    const contentType = request.headers.get("content-type");
+    if (
+      contentType &&
+      !contentType.toLowerCase().includes("application/json")
+    ) {
+      return errorResponse(
+        415,
+        "UNSUPPORTED_MEDIA_TYPE",
+        "Chỉ hỗ trợ Content-Type application/json.",
+      );
+    }
+    const bodyRead = await readBoundedBodyText(request, MAX_BODY_BYTES);
+    if (!bodyRead.ok) {
       return errorResponse(
         422,
         "VALIDATION_FAILED",
         "Nội dung yêu cầu quá lớn.",
       );
     }
+    const raw = bodyRead.text;
     let parsed: unknown = undefined;
     if (raw.length > 0) {
       try {

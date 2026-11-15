@@ -33,6 +33,18 @@ const DISALLOWED_RUNTIME_DB_USERS = new Set<string>([
 
 let envLoadedFromDisk = false;
 
+export function stripMatchingQuotes(raw: string): string {
+  const val = raw.trim();
+  if (
+    val.length >= 2 &&
+    ((val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'")))
+  ) {
+    return val.slice(1, -1);
+  }
+  return val;
+}
+
 export function ensureDevtestEnvLoaded(): void {
   if (envLoadedFromDisk) {
     return;
@@ -53,7 +65,7 @@ export function ensureDevtestEnvLoaded(): void {
       continue;
     }
     const key = trimmed.slice(0, idx).trim();
-    const val = trimmed.slice(idx + 1).trim();
+    const val = stripMatchingQuotes(trimmed.slice(idx + 1));
     if (process.env[key] === undefined) {
       process.env[key] = val;
     }
