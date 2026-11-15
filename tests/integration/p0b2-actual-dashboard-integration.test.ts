@@ -466,4 +466,70 @@ describe("P0B-2 Integration Tests: KPI Actuals, Reconciliation & Dashboard (TASK
       ]);
     }
   });
+
+  it("enforces SQL scope pushdown for DEPARTMENT_MANAGER and STAFF on getDashboardOverview (M-02)", async () => {
+    const mgrKhcnActor = await makeActorForUserKey("mgr_khcn");
+    const staffKhcnActor = await makeActorForUserKey("staff_khcn");
+    const staffKhdnActor = await makeActorForUserKey("staff_khdn");
+
+    const crossSellFlowDefId = "55555555-5555-4555-8555-555555555505";
+    const crossDeptActual = await createKpiActual(staffKhcnActor, {
+      kpi_definition_id: crossSellFlowDefId,
+      period_type: "MONTH",
+      period_key: "2026-12",
+      as_of_date: "2026-12-14",
+      primary_staff_id: staffKhcnActor.ctx.staff_id,
+      referrer_staff_id: staffKhdnActor.ctx.staff_id,
+      actual_value: 200,
+      source_code: "SYNTHETIC_DEVTEST",
+      source_ref: "SYN-M02-XDEPT-001",
+    });
+    expect(crossDeptActual.ok).toBe(true);
+    if (!crossDeptActual.ok) return;
+    createdActualIds.push(crossDeptActual.data.id);
+
+    const mgrOv = await getDashboardOverview(
+      mgrKhcnActor,
+      new URL(
+        `${cfg.appOrigin}/api/dashboard/overview?period_type=MONTH&period_key=2026-12&as_of_date=2026-12-14`,
+      ),
+    );
+    expect(mgrOv.ok).toBe(true);
+    if (!mgrOv.ok) return;
+    expect(mgrOv.data.viewer_scope).toBe("DEPARTMENT");
+    expect(mgrOv.data.drilldown_departments.length).toBe(1);
+    expect(mgrOv.data.drilldown_departments[0]?.entity_id).toBe(
+      mgrKhcnActor.ctx.department.id,
+    );
+    expect(
+      mgrOv.data.drilldown_staff.every(
+        (s) => s.department_id === mgrKhcnActor.ctx.department.id,
+      ),
+    ).toBe(true);
+    // Cross-dept referrer attribution (200 in KHCN with KHDN referrer at 70/30 split -> 140 for KHCN, not 200)
+    const mgrCrossSell = mgrOv.data.groups
+      .flatMap((g) => g.metrics)
+      .find((m) => m.kpi_definition_id === crossSellFlowDefId);
+    expect(mgrCrossSell?.actual_value).toBe(140);
+
+    const staffOv = await getDashboardOverview(
+      staffKhcnActor,
+      new URL(
+        `${cfg.appOrigin}/api/dashboard/overview?period_type=MONTH&period_key=2026-11&as_of_date=2026-11-14`,
+      ),
+    );
+    expect(staffOv.ok).toBe(true);
+    if (!staffOv.ok) return;
+    expect(staffOv.data.viewer_scope).toBe("SELF");
+    expect(staffOv.data.drilldown_departments.length).toBe(0);
+    expect(staffOv.data.drilldown_staff.length).toBe(1);
+    expect(staffOv.data.drilldown_staff[0]?.entity_id).toBe(
+      staffKhcnActor.ctx.staff_id,
+    );
+    expect(
+      staffOv.data.drilldown_staff.some(
+        (s) => s.entity_id === staffKhdnActor.ctx.staff_id,
+      ),
+    ).toBe(false);
+  });
 });

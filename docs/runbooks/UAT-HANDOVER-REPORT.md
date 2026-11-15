@@ -1,9 +1,9 @@
 # Branch Sales OS V3.0 — UAT & Final Handover Report (DEVTEST Synthetic)
 
 - **Target Release:** Branch Sales OS V3.0 MVP (DEVTEST Synthetic)
-- **Baseline:** `TASK-0001` through `TASK-0015` (`main` + `fix/TASK-0015-conformance-handover`; `TASK-0016` `REVIEWED` for UI/perf/escalation follow-ups; `TASK-0013` `BLOCKED`)
-- **Open Decisions:** `D-05` (real CIF/PII integration) and `D-10` (production deploy / enterprise SSO) remain `OPEN`.
-- **Owner UAT Status:** `READY FOR OWNER UAT` (Agent does not self-certify final owner UAT).
+- **Baseline:** `TASK-0001` through `TASK-0017` (`main` `92789091f7a763fa9c358cc28e61d130e7d1ef33` + `TASK-0016` on `feat/TASK-0016-dashboard-alerts-nav-hardening`; `M-03` & `TASK-0013` remain `OPEN`/`BLOCKED`)
+- **Open Decisions:** `D-05` (real CIF/PII integration), `D-10` (production deploy / enterprise SSO), `M-03` (`ADJUST_FINAL` 2-step contract), and `TASK-0013` remain `OPEN`.
+- **Owner UAT Status:** `TECHNICAL HANDOVER READY` / `READY FOR OWNER UAT` (Agent does not self-certify final owner UAT).
 
 ## 1. Traceability Matrix (`Feature → Task → AC → PR / Merge SHA`)
 
@@ -23,6 +23,8 @@
 | Audit Cleanup | `TASK-0012` | Unify `VALIDATION_FAILED` in `p0b1-service`, security headers & audit cleanup | PR #19 (`0535756868dd7cebfe8d7e336f38965ecba50b0d`) |
 | Audit Hardening (Batch 1) | `TASK-0014` | `A-03` streaming body reader, `A-02` CSP/HSTS/COOP, `A-06` env parser, `A-08` CI/Dependabot | PR #21 (`d9d9e6fe88f5f710014627953d4aca72d181c1ea`) |
 | Conformance & Handover Refresh | `TASK-0015` | Fix `H-01`, `H-02`, `M-01`, `M-04`, `L-01`, `L-02`, `L-03`, `M-07` + A5 audit + C1..C5 gates | PR #27 (`67005c162b8e6f1e6a6a71c2a8188a0e09d82c5b`, post-merge CI `43684697313`) |
+| Lean Code Audit | `TASK-0017` | Remove dead code & consolidate duplicated helpers (`service-core`, `api-guard`, `validation`) | PR #29 (`92789091f7a763fa9c358cc28e61d130e7d1ef33`, post-merge CI `43687091274`) |
+| Dashboard/Alerts/Nav Hardening | `TASK-0016` | `M-02` SQL scope pushdown, `M-05` alert escalation, `M-06` 5-group nav, interactive drill-down, `STAFF` block, CSS chart, read-only `/api/audit-events` | Branch `feat/TASK-0016-dashboard-alerts-nav-hardening` (pending PR merge) |
 
 ## 2. Security, RBAC & Data Integrity Verification Summary
 - **Least-privilege DB role (`app_runtime_role`):** Verified `rolsuper = false`, `rolbypassrls = false`, `INSERT`-only on `audit_events`, `SELECT/INSERT`-only on `pipeline_stage_transitions`; live `DELETE FROM audit_events` rejected with SQLSTATE `42501`.

@@ -1,0 +1,16 @@
+TASK-0016 Gates Evidence — feat/TASK-0016-dashboard-alerts-nav-hardening
+Date: 2026-11-15T14:04:01+07:00
+Node: v24.22.2
+npm: 11.19.1
+Base main SHA: 92789091f7a763fa9c358cc28e61d130e7d1ef33
+
+Gate Results (all executed after final code & doc edits):
+- npm run typecheck: PASS (0 errors)
+- npm run lint (eslint . --max-warnings=0): PASS (0 warnings)
+- npm run format:check (prettier --check .): PASS
+- npm run test:unit: PASS (14 files, 52 tests)
+- npm run test:integration: PASS (9 files, 49 tests — includes M-02 SQL scope pushdown + cross-dept referrer attribution, M-05 alert escalation + alerts.escalate audit, M-06 GET /api/audit-events RBAC + 42501 least-privilege handling, and pg_dump backup/restore parity)
+- npm run build (next build): PASS
+- npm run test:e2e (playwright test): PASS (13/13 Chromium E2E tests, 33.6s, 0 console/page errors)
+- npm run security (gitleaks 8.30.1 + npm audit): PASS (87 commits scanned, 0 leaks; 0 High/Critical vulnerabilities, 9 moderate in devDeps glob/minimatch only)
+- git diff --check: PASS

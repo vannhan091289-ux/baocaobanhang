@@ -431,7 +431,13 @@ export async function listInAppAlerts(
 export async function evaluateP0Alerts(
   actor: Actor,
   body: unknown,
-): Promise<ServiceResult<{ created_count: number; alerts: InAppAlertRow[] }>> {
+): Promise<
+  ServiceResult<{
+    created_count: number;
+    escalated_count: number;
+    alerts: InAppAlertRow[];
+  }>
+> {
   if (!isPlainObject(body)) {
     return fail(400, "VALIDATION_FAILED", "Request body must be a JSON object");
   }
@@ -745,6 +751,89 @@ export async function evaluateP0Alerts(
       }
     }
 
+    // 7. Escalate overdue OPEN alerts past escalation_after_working_days (M-05)
+    const overdueOpenRes = await client.query<{
+      id: string;
+      rule_code: string;
+      department_id: string;
+      owner_staff_id: string;
+      escalation_after_working_days: number;
+    }>(
+      `SELECT a.id, a.rule_code, a.department_id, a.owner_staff_id, r.escalation_after_working_days
+       FROM in_app_alerts a
+       JOIN alert_rule_configs r ON r.rule_code = a.rule_code
+       WHERE a.resolution_status = 'OPEN'
+         AND a.escalated_to_staff_id IS NULL
+         AND r.is_enabled = TRUE
+         AND ($1::uuid IS NULL OR a.department_id = $1)
+         AND ($2::uuid IS NULL OR a.owner_staff_id = $2)
+         AND (
+           CASE
+             WHEN EXISTS (
+               SELECT 1 FROM branch_calendar_days bcd
+               WHERE bcd.calendar_date > (a.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+                 AND bcd.calendar_date <= $3::date
+             ) THEN (
+               SELECT count(*) FROM branch_calendar_days bcd
+               WHERE bcd.calendar_date > (a.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+                 AND bcd.calendar_date <= $3::date
+                 AND bcd.is_working_day = TRUE
+             ) >= r.escalation_after_working_days
+             ELSE ($3::date - (a.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date) >= r.escalation_after_working_days
+           END
+         )`,
+      [scopeFilter.deptId, scopeFilter.staffId, asOfDate],
+    );
+
+    let escalatedCount = 0;
+    for (const overdue of overdueOpenRes.rows) {
+      const targetRes = await client.query<{ id: string }>(
+        `SELECT s.id
+         FROM staff s
+         JOIN role_assignments ra
+           ON ra.staff_id = s.id
+          AND ra.status = 'ACTIVE'
+          AND ra.effective_from <= CURRENT_TIMESTAMP
+          AND (ra.effective_to IS NULL OR ra.effective_to > CURRENT_TIMESTAMP)
+         WHERE s.status = 'ACTIVE'
+           AND s.id <> $1
+           AND (
+             (ra.role_code = 'DEPARTMENT_MANAGER' AND s.department_id = $2)
+             OR ra.role_code = 'EXECUTIVE'
+           )
+         ORDER BY CASE WHEN ra.role_code = 'DEPARTMENT_MANAGER' THEN 1 ELSE 2 END ASC,
+                  s.staff_code ASC
+         LIMIT 1`,
+        [overdue.owner_staff_id, overdue.department_id],
+      );
+      const escalateToId = targetRes.rows[0]?.id;
+      if (escalateToId) {
+        await client.query(
+          `UPDATE in_app_alerts
+           SET escalated_to_staff_id = $1
+           WHERE id = $2 AND escalated_to_staff_id IS NULL`,
+          [escalateToId, overdue.id],
+        );
+        escalatedCount += 1;
+        await appendAuditEvent(client, {
+          actorStaffId: actor.ctx.staff_id,
+          actorSubjectRef: `staff:${actor.ctx.staff_id}`,
+          action: "alerts.escalate",
+          resourceType: "in_app_alert",
+          resourceId: overdue.id,
+          decision: "ALLOW",
+          reasonCode: "P0_ALERT_ESCALATED",
+          scopeContext: {
+            escalated_to_staff_id: escalateToId,
+            rule_code: overdue.rule_code,
+            escalation_after_working_days:
+              overdue.escalation_after_working_days,
+            as_of_date: asOfDate,
+          },
+        });
+      }
+    }
+
     const alertsRes =
       insertedIds.length > 0
         ? await client.query(
@@ -765,11 +854,16 @@ export async function evaluateP0Alerts(
       resourceId: "evaluate",
       decision: "ALLOW",
       reasonCode: "P0_ALERTS_EVALUATED",
-      scopeContext: { as_of_date: asOfDate, created_count: createdCount },
+      scopeContext: {
+        as_of_date: asOfDate,
+        created_count: createdCount,
+        escalated_count: escalatedCount,
+      },
     });
 
     return {
       created_count: createdCount,
+      escalated_count: escalatedCount,
       alerts: alertsRes.rows.map(mapAlert),
     };
   });

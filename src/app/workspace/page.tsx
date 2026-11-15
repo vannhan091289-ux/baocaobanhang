@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { SESSION_COOKIE_NAME, verifyRequestSession } from "@/server/session";
+import { AuditViewerPanel } from "./audit-viewer-panel";
 import { OrgManagementPanel } from "./org-management-panel";
 
 export const runtime = "nodejs";
@@ -70,6 +71,9 @@ export default async function WorkspacePage() {
   }
 
   const { selfContext, csrfToken } = sessionCheck;
+  const roleCode = selfContext.effective_role.role_code;
+  const isConfigAdmin = roleCode === "CONFIG_ADMIN";
+  const canViewAudit = roleCode === "CONFIG_ADMIN" || roleCode === "EXECUTIVE";
 
   return (
     <main className="scaffold-container" aria-labelledby="workspace-heading">
@@ -141,59 +145,111 @@ export default async function WorkspacePage() {
         className="scaffold-status"
         aria-labelledby="module-empty-heading"
       >
-        <h2 id="module-empty-heading">Trạng thái phân hệ nghiệp vụ</h2>
+        <h2 id="module-empty-heading">Điều hướng 5 nhóm phân hệ</h2>
         <p>
-          Hệ thống đã kích hoạt chuỗi định danh nền tảng (<code>S1-A</code>),
-          quản trị danh mục Tổ chức, Nhân sự &amp; Quy trình phân quyền 2 bước (
-          <code>S1-B/S1-C</code>), và phân hệ Từ điển 7 nhóm KPI, Lịch làm việc
-          &amp; Phân bổ chỉ tiêu Năm/Tháng/Tuần/Ngày (<code>P0A</code>).
+          Hệ thống phân chia điều hướng theo 5 nhóm chức năng và chỉ hiển thị
+          liên kết phù hợp với vai trò hiệu lực (<code>{roleCode}</code>).
         </p>
         <nav
           aria-label="Điều hướng phân hệ nghiệp vụ"
-          className="scaffold-actions"
+          data-testid="workspace-nav-groups"
         >
-          <Link
-            className="scaffold-button"
-            href="/workspace/kpi-targets"
-            data-testid="nav-kpi-targets"
-          >
-            Mở Từ điển 7 Nhóm KPI &amp; Chỉ tiêu (P0A)
-          </Link>
-          <Link
-            className="scaffold-button"
-            href="/workspace/planning"
-            data-testid="nav-planning"
-          >
-            Kế hoạch Bán hàng &amp; Review Thứ Hai (P0B-1)
-          </Link>
-          <Link
-            className="scaffold-button"
-            href="/workspace/dashboard"
-            data-testid="nav-dashboard"
-          >
-            Dashboard Đa lớp &amp; Đối soát Actual (P0B-2)
-          </Link>
-          <Link
-            className="scaffold-button"
-            href="/workspace/pipeline"
-            data-testid="nav-pipeline"
-          >
-            Pipeline Prospect / Lead / Opportunity (P0C)
-          </Link>
-          <Link
-            className="scaffold-button"
-            href="/workspace/alerts"
-            data-testid="nav-alerts"
-          >
-            Trung tâm Cảnh báo P0 (P0C)
-          </Link>
-          <Link
-            className="scaffold-button"
-            href="/workspace/customers"
-            data-testid="nav-customers"
-          >
-            Customer 360 Synthetic (P0D)
-          </Link>
+          {!isConfigAdmin ? (
+            <div className="workspace-nav-groups">
+              <div data-testid="nav-group-overview">
+                <h3>1. Tổng quan &amp; Điều hành</h3>
+                <div className="scaffold-actions">
+                  <Link
+                    className="scaffold-button"
+                    href="/workspace/dashboard"
+                    data-testid="nav-dashboard"
+                  >
+                    Dashboard Đa lớp &amp; Đối soát Actual (P0B-2)
+                  </Link>
+                  <Link
+                    className="scaffold-button"
+                    href="/workspace/alerts"
+                    data-testid="nav-alerts"
+                  >
+                    Trung tâm Cảnh báo P0 (P0C)
+                  </Link>
+                </div>
+              </div>
+
+              <div data-testid="nav-group-kpi">
+                <h3>2. Chỉ tiêu &amp; Kết quả</h3>
+                <div className="scaffold-actions">
+                  <Link
+                    className="scaffold-button"
+                    href="/workspace/kpi-targets"
+                    data-testid="nav-kpi-targets"
+                  >
+                    Từ điển 7 Nhóm KPI &amp; Chỉ tiêu (P0A)
+                  </Link>
+                </div>
+              </div>
+
+              <div data-testid="nav-group-planning">
+                <h3>3. Kế hoạch bán hàng</h3>
+                <div className="scaffold-actions">
+                  <Link
+                    className="scaffold-button"
+                    href="/workspace/planning"
+                    data-testid="nav-planning"
+                  >
+                    Kế hoạch Bán hàng &amp; Review Thứ Hai (P0B-1)
+                  </Link>
+                </div>
+              </div>
+
+              <div data-testid="nav-group-customers">
+                <h3>4. Khách hàng &amp; Cơ hội</h3>
+                <div className="scaffold-actions">
+                  <Link
+                    className="scaffold-button"
+                    href="/workspace/pipeline"
+                    data-testid="nav-pipeline"
+                  >
+                    Pipeline Prospect / Lead / Opportunity (P0C)
+                  </Link>
+                  <Link
+                    className="scaffold-button"
+                    href="/workspace/customers"
+                    data-testid="nav-customers"
+                  >
+                    Customer 360 Synthetic (P0D)
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div data-testid="nav-group-admin">
+            <h3>5. Quản trị &amp; Cấu hình</h3>
+            <div className="scaffold-actions">
+              {isConfigAdmin ? (
+                <Link
+                  className="scaffold-button"
+                  href="/workspace/kpi-targets"
+                  data-testid="nav-kpi-targets"
+                >
+                  Quản trị Từ điển 7 Nhóm KPI &amp; Lịch làm việc (P0A)
+                </Link>
+              ) : null}
+              <a className="scaffold-button" href="#org-management">
+                Quản trị Tổ chức &amp; Phân quyền (S1-B/S1-C)
+              </a>
+              {canViewAudit ? (
+                <a
+                  className="scaffold-button"
+                  href="#audit-events"
+                  data-testid="nav-audit-events"
+                >
+                  Nhật ký Kiểm toán (Audit Events)
+                </a>
+              ) : null}
+            </div>
+          </div>
         </nav>
 
         <form action="/auth/logout" method="POST" className="logout-form">
@@ -203,6 +259,8 @@ export default async function WorkspacePage() {
           </button>
         </form>
       </section>
+
+      {canViewAudit ? <AuditViewerPanel /> : null}
     </main>
   );
 }
