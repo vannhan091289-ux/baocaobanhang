@@ -436,6 +436,17 @@ describe("P0B-2 Integration Tests: KPI Actuals, Reconciliation & Dashboard (TASK
       expect(expiredAdj.ok).toBe(false);
       if (!expiredAdj.ok) expect(expiredAdj.status).toBe(404);
 
+      // Verify DENY audit_events recorded for rejected ADJUST_FINAL attempts
+      const denyAudits = await migratorPool.query<{ c: string }>(
+        `SELECT count(*)::text AS c
+         FROM audit_events
+         WHERE action = 'kpi.actual.adjust_final'
+           AND decision = 'DENY'
+           AND resource_id = $1`,
+        [created.data.id],
+      );
+      expect(Number(denyAudits.rows[0]!.c)).toBeGreaterThanOrEqual(4);
+
       // 3. Valid same-department ACTIVE approver (mgr_khcn) -> 200 OK
       const validAdj = await reconcileKpiActual(execActor, created.data.id, {
         reconcile_action: "ADJUST_FINAL",

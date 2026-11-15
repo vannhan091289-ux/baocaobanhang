@@ -1041,6 +1041,18 @@ export async function reconcileKpiActual(
           404,
           "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
           "Không tìm thấy người phê duyệt.",
+          {
+            denyAudit: {
+              action: "kpi.actual.adjust_final",
+              resourceType: "kpi_actual_record",
+              resourceId: actualId,
+              scopeContext: {
+                reason: "INVALID_ADJUSTMENT_APPROVER",
+                approved_by_staff_id: approverIdVal,
+              },
+              reasonCode: "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+            },
+          },
         );
       }
       const approverRow = approverRes.rows[0]!;
@@ -1053,6 +1065,19 @@ export async function reconcileKpiActual(
           403,
           "INVALID_ADJUSTMENT_APPROVER",
           "Approver must hold EXECUTIVE or DEPARTMENT_MANAGER role",
+          {
+            denyAudit: {
+              action: "kpi.actual.adjust_final",
+              resourceType: "kpi_actual_record",
+              resourceId: actualId,
+              scopeContext: {
+                reason: "INVALID_ADJUSTMENT_APPROVER_ROLE",
+                approved_by_staff_id: approverIdVal,
+                approver_role: approverRole,
+              },
+              reasonCode: "INVALID_ADJUSTMENT_APPROVER",
+            },
+          },
         );
       }
       if (
@@ -1063,6 +1088,20 @@ export async function reconcileKpiActual(
           403,
           "INVALID_ADJUSTMENT_APPROVER",
           "Department manager approver must belong to the same department",
+          {
+            denyAudit: {
+              action: "kpi.actual.adjust_final",
+              resourceType: "kpi_actual_record",
+              resourceId: actualId,
+              scopeContext: {
+                reason: "INVALID_ADJUSTMENT_APPROVER_DEPARTMENT",
+                approved_by_staff_id: approverIdVal,
+                approver_department_id: String(approverRow.department_id),
+                record_department_id: String(existing.department_id),
+              },
+              reasonCode: "INVALID_ADJUSTMENT_APPROVER",
+            },
+          },
         );
       }
 

@@ -742,6 +742,24 @@ export async function listLeads(
   };
 }
 
+function isScopedParentInActorScope(
+  row: { department_id: string; owner_staff_id: string } | undefined,
+  actor: Actor,
+): boolean {
+  if (!row) return false;
+  const actorRole = actor.ctx.effective_role.role_code;
+  if (actorRole === "DEPARTMENT_MANAGER") {
+    return row.department_id === actor.ctx.department.id;
+  }
+  if (actorRole === "STAFF") {
+    return (
+      row.department_id === actor.ctx.department.id &&
+      row.owner_staff_id === actor.ctx.staff_id
+    );
+  }
+  return true;
+}
+
 export async function createLead(
   actor: Actor,
   body: unknown,
@@ -871,20 +889,20 @@ export async function createLead(
         `SELECT id, department_id, owner_staff_id FROM prospects WHERE id = $1`,
         [prosVal],
       );
-      const pRow = parentProspect.rows[0];
-      const actorRole = actor.ctx.effective_role.role_code;
-      const outOfScope =
-        !pRow ||
-        (actorRole === "DEPARTMENT_MANAGER" &&
-          pRow.department_id !== actor.ctx.department.id) ||
-        (actorRole === "STAFF" &&
-          (pRow.department_id !== actor.ctx.department.id ||
-            pRow.owner_staff_id !== actor.ctx.staff_id));
-      if (outOfScope) {
+      if (!isScopedParentInActorScope(parentProspect.rows[0], actor)) {
         return abort(
           404,
           "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
           "Không tìm thấy prospect trong phạm vi quyền.",
+          {
+            denyAudit: {
+              action: "pipeline.write",
+              resourceType: "prospect",
+              resourceId: prosVal,
+              scopeContext: { reason: "PARENT_PROSPECT_OUT_OF_SCOPE" },
+              reasonCode: "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+            },
+          },
         );
       }
     }
@@ -1404,20 +1422,20 @@ export async function createOpportunity(
       }>(`SELECT id, department_id, owner_staff_id FROM leads WHERE id = $1`, [
         leadVal,
       ]);
-      const lRow = parentLead.rows[0];
-      const actorRole = actor.ctx.effective_role.role_code;
-      const outOfScope =
-        !lRow ||
-        (actorRole === "DEPARTMENT_MANAGER" &&
-          lRow.department_id !== actor.ctx.department.id) ||
-        (actorRole === "STAFF" &&
-          (lRow.department_id !== actor.ctx.department.id ||
-            lRow.owner_staff_id !== actor.ctx.staff_id));
-      if (outOfScope) {
+      if (!isScopedParentInActorScope(parentLead.rows[0], actor)) {
         return abort(
           404,
           "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
           "Không tìm thấy lead trong phạm vi quyền.",
+          {
+            denyAudit: {
+              action: "pipeline.write",
+              resourceType: "lead",
+              resourceId: leadVal,
+              scopeContext: { reason: "PARENT_LEAD_OUT_OF_SCOPE" },
+              reasonCode: "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+            },
+          },
         );
       }
     }

@@ -429,6 +429,17 @@ describe("P0C Integration Tests: Pipeline State Machine & 6-Rule In-App Alert En
     expect(crossOpp.ok).toBe(false);
     if (!crossOpp.ok) expect(crossOpp.status).toBe(404);
 
+    // Verify DENY audit_events recorded for cross-scope parent prospect/lead
+    const denyParentAudits = await migratorPool.query<{ c: string }>(
+      `SELECT count(*)::text AS c
+       FROM audit_events
+       WHERE action = 'pipeline.write'
+         AND decision = 'DENY'
+         AND resource_id IN ($1, $2)`,
+      [khdnPros.data.id, khdnLead.data.id],
+    );
+    expect(Number(denyParentAudits.rows[0]!.c)).toBeGreaterThanOrEqual(2);
+
     // L-03a: 409 VERSION_CONFLICT on stale expected_version
     const conflictPatch = await patchProspect(staffKhdn, {
       id: khdnPros.data.id,
