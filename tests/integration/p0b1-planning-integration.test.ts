@@ -539,4 +539,140 @@ describe("P0B-1 Integration Tests: Sales Plans, Single-Source Activity Log & Mon
     expect(invalidReviewBody.error.code).toBe("VALIDATION_FAILED");
     expect(invalidReviewBody.error.details?.field).toBe("week_period_key");
   });
+
+  it("enforces department scope on create_directive (M-01) and half-open week bounds across UTC and Asia/Ho_Chi_Minh (M-04)", async () => {
+    const mgrKhdnActor = await makeActorForUserKey("mgr_khdn");
+    const mgrKhcnActor = await makeActorForUserKey("mgr_khcn");
+    const staffKhcnActor = await makeActorForUserKey("staff_khcn");
+    const staffKhcn = SYNTHETIC_USERS.find((u) => u.key === "staff_khcn")!;
+
+    // M-01: Create a KHDN monday_review as mgr_khdn, then mgr_khcn tries create_directive on it -> 404
+    const khdnRevRes = await postReviewsRoute(
+      makeAuthRequest("/api/planning/monday-reviews", {
+        method: "POST",
+        actor: mgrKhdnActor,
+        body: {
+          action: "create_review",
+          week_period_key: "2026-W46",
+          review_scope: "DEPARTMENT",
+          department_id: SYNTHETIC_DEPARTMENTS.KHDN.id,
+          review_date: "2026-11-16",
+          summary_notes: "M01 KHDN review",
+        },
+      }),
+    );
+    expect(khdnRevRes.status).toBe(201);
+    const khdnRevBody = (await khdnRevRes.json()) as { data: { id: string } };
+    createdReviewIds.push(khdnRevBody.data.id);
+
+    const crossDeptDirRes = await postReviewsRoute(
+      makeAuthRequest("/api/planning/monday-reviews", {
+        method: "POST",
+        actor: mgrKhcnActor,
+        body: {
+          action: "create_directive",
+          monday_review_id: khdnRevBody.data.id,
+          assignee_staff_id: staffKhcn.staff!.id,
+          title: "Cross-dept directive should be denied",
+          due_at: "2026-11-18T17:00:00+07:00",
+        },
+      }),
+    );
+    expect(crossDeptDirRes.status).toBe(404);
+    const crossDeptDirBody = (await crossDeptDirRes.json()) as {
+      error: { code: string };
+    };
+    expect(crossDeptDirBody.error.code).toBe(
+      "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+    );
+
+    // M-04: Microsecond boundary at Sunday 23:59:59.999999+07:00 vs Monday 00:00:00.000000+07:00
+    const sundayEndActRes = await postActivitiesRoute(
+      makeAuthRequest("/api/planning/activities", {
+        method: "POST",
+        actor: staffKhcnActor,
+        body: {
+          activity_type: "CUSTOMER_VISIT",
+          status: "COMPLETED",
+          occurred_at: "2026-11-15T23:59:59.999+07:00",
+          outcome_summary: "M04 Sunday 23:59:59.999999 boundary",
+        },
+      }),
+    );
+    expect(sundayEndActRes.status).toBe(201);
+    const sundayEndBody = (await sundayEndActRes.json()) as {
+      data: { id: string; occurred_at: string };
+    };
+    createdActivityIds.push(sundayEndBody.data.id);
+
+    const mondayStartActRes = await postActivitiesRoute(
+      makeAuthRequest("/api/planning/activities", {
+        method: "POST",
+        actor: staffKhcnActor,
+        body: {
+          activity_type: "CUSTOMER_VISIT",
+          status: "COMPLETED",
+          occurred_at: "2026-11-16T00:00:00.000+07:00",
+          outcome_summary: "M04 Monday 00:00:00.000000 boundary",
+        },
+      }),
+    );
+    expect(mondayStartActRes.status).toBe(201);
+    const mondayStartBody = (await mondayStartActRes.json()) as {
+      data: { id: string; occurred_at: string };
+    };
+    createdActivityIds.push(mondayStartBody.data.id);
+
+    // Update exact microsecond instant directly in DB to ensure microsecond precision (JS Date truncates .999999 to .999)
+    await migratorPool.query(
+      `UPDATE activity_logs SET occurred_at = '2026-11-15T23:59:59.999999+07:00'::timestamptz WHERE id = $1`,
+      [sundayEndBody.data.id],
+    );
+
+    // Verify stored instants under both UTC and Asia/Ho_Chi_Minh session timezones
+    const client = await migratorPool.connect();
+    try {
+      await client.query(`SET TIME ZONE 'UTC'`);
+      const utcEpochRes = await client.query<{ id: string; epoch: string }>(
+        `SELECT id, extract(epoch from occurred_at)::text AS epoch FROM activity_logs WHERE id = ANY($1::uuid[]) ORDER BY occurred_at ASC`,
+        [[sundayEndBody.data.id, mondayStartBody.data.id]],
+      );
+      await client.query(`SET TIME ZONE 'Asia/Ho_Chi_Minh'`);
+      const vnEpochRes = await client.query<{ id: string; epoch: string }>(
+        `SELECT id, extract(epoch from occurred_at)::text AS epoch FROM activity_logs WHERE id = ANY($1::uuid[]) ORDER BY occurred_at ASC`,
+        [[sundayEndBody.data.id, mondayStartBody.data.id]],
+      );
+      expect(utcEpochRes.rows).toEqual(vnEpochRes.rows);
+    } finally {
+      client.release();
+    }
+
+    // 2026-W46 contains Sunday 23:59:59.999999+07:00 and excludes Monday 00:00:00.000000+07:00
+    const w46Res = await getActivitiesRoute(
+      makeAuthRequest(
+        "/api/planning/activities?week_period_key=2026-W46&limit=50",
+        { actor: staffKhcnActor },
+      ),
+    );
+    expect(w46Res.status).toBe(200);
+    const w46Ids = (
+      (await w46Res.json()) as { data: Array<{ id: string }> }
+    ).data.map((i) => i.id);
+    expect(w46Ids).toContain(sundayEndBody.data.id);
+    expect(w46Ids).not.toContain(mondayStartBody.data.id);
+
+    // 2026-W47 contains Monday 00:00:00.000000+07:00 and excludes Sunday 23:59:59.999999+07:00
+    const w47Res = await getActivitiesRoute(
+      makeAuthRequest(
+        "/api/planning/activities?week_period_key=2026-W47&limit=50",
+        { actor: staffKhcnActor },
+      ),
+    );
+    expect(w47Res.status).toBe(200);
+    const w47Ids = (
+      (await w47Res.json()) as { data: Array<{ id: string }> }
+    ).data.map((i) => i.id);
+    expect(w47Ids).toContain(mondayStartBody.data.id);
+    expect(w47Ids).not.toContain(sundayEndBody.data.id);
+  });
 });

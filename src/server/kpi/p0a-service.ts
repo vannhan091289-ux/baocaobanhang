@@ -1679,13 +1679,22 @@ export async function createKpiTarget(
         }
 
         if (parentTargetId) {
-          const parentRes = await client.query(
-            `SELECT id, kpi_definition_id FROM kpi_targets WHERE id = $1`,
+          const parentRes = await client.query<{
+            id: string;
+            kpi_definition_id: string;
+            department_id: string | null;
+          }>(
+            `SELECT id, kpi_definition_id, department_id FROM kpi_targets WHERE id = $1`,
             [parentTargetId],
           );
+          const parentRow = parentRes.rows[0];
+          const isOutOfDeptScope =
+            current.effective_role.role_code !== "EXECUTIVE" &&
+            parentRow?.department_id !== current.department.id;
           if (
             parentRes.rowCount === 0 ||
-            parentRes.rows[0]!.kpi_definition_id !== kpiDefinitionId
+            parentRow!.kpi_definition_id !== kpiDefinitionId ||
+            isOutOfDeptScope
           ) {
             abort(
               404,
@@ -1696,7 +1705,11 @@ export async function createKpiTarget(
                   action: "kpi.target.write",
                   resourceType: "kpi_target",
                   resourceId: parentTargetId,
-                  scopeContext: { reason: "PARENT_MISMATCH" },
+                  scopeContext: {
+                    reason: isOutOfDeptScope
+                      ? "PARENT_DEPARTMENT_OUT_OF_SCOPE"
+                      : "PARENT_MISMATCH",
+                  },
                   reasonCode: "PARENT_TARGET_NOT_FOUND_OR_MISMATCH",
                 },
               },
@@ -2200,22 +2213,23 @@ export async function approveKpiTarget(
           },
         );
       }
-      if (row.proposed_by_staff_id === current.staff_id) {
-        abort(
-          403,
-          "SEPARATION_OF_DUTIES_VIOLATION",
-          "Không được tự phê duyệt chỉ tiêu do chính mình đề xuất.",
-          {
-            denyAudit: {
-              action: "kpi.target.approve",
-              resourceType: "kpi_target",
-              resourceId: targetId,
-              scopeContext: { proposed_by_staff_id: row.proposed_by_staff_id },
-              reasonCode: "SEPARATION_OF_DUTIES_VIOLATION",
-            },
+    }
+
+    if (row.proposed_by_staff_id === current.staff_id) {
+      abort(
+        403,
+        "SEPARATION_OF_DUTIES_VIOLATION",
+        "Không được tự phê duyệt chỉ tiêu do chính mình đề xuất.",
+        {
+          denyAudit: {
+            action: "kpi.target.approve",
+            resourceType: "kpi_target",
+            resourceId: targetId,
+            scopeContext: { proposed_by_staff_id: row.proposed_by_staff_id },
+            reasonCode: "SEPARATION_OF_DUTIES_VIOLATION",
           },
-        );
-      }
+        },
+      );
     }
 
     if (Number(row.row_version) !== expectedVersion) {

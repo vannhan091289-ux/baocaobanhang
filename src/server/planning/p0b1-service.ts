@@ -217,15 +217,18 @@ export function resolveWeekBoundsVn(weekKey: string): {
   const targetMondayUtcMs =
     week1MondayUtcMs + (week - 1) * 7 * 24 * 60 * 60 * 1000;
   const targetSundayUtcMs = targetMondayUtcMs + 6 * 24 * 60 * 60 * 1000;
+  const nextMondayUtcMs = targetMondayUtcMs + 7 * 24 * 60 * 60 * 1000;
 
   const mon = new Date(targetMondayUtcMs);
   const sun = new Date(targetSundayUtcMs);
+  const nextMon = new Date(nextMondayUtcMs);
   const mondayDate = mon.toISOString().slice(0, 10);
   const sundayDate = sun.toISOString().slice(0, 10);
+  const nextMondayDate = nextMon.toISOString().slice(0, 10);
 
-  // Convert VN local 00:00:00+07:00 and 23:59:59.999+07:00 to UTC ISO strings
+  // Half-open interval [Monday 00:00:00.000+07:00, next Monday 00:00:00.000+07:00)
   const startUtc = new Date(`${mondayDate}T00:00:00.000+07:00`).toISOString();
-  const endUtc = new Date(`${sundayDate}T23:59:59.999+07:00`).toISOString();
+  const endUtc = new Date(`${nextMondayDate}T00:00:00.000+07:00`).toISOString();
 
   return {
     mondayDate,
@@ -1092,7 +1095,7 @@ export async function listActivities(
   if (weekBounds) {
     params.push(weekBounds.startIsoUtc, weekBounds.endIsoUtc);
     where.push(
-      `a.occurred_at >= $${params.length - 1}::timestamptz AND a.occurred_at <= $${params.length}::timestamptz`,
+      `a.occurred_at >= $${params.length - 1}::timestamptz AND a.occurred_at < $${params.length}::timestamptz`,
     );
   }
   if (dateFilter) {
@@ -1662,7 +1665,7 @@ export async function listMondayReviews(
        FROM activity_logs a
        WHERE a.actor_staff_id = s.id
          AND a.occurred_at >= $2::timestamptz
-         AND a.occurred_at <= $3::timestamptz
+         AND a.occurred_at < $3::timestamptz
      ) a_agg ON TRUE
      LEFT JOIN LATERAL (
        SELECT count(*)::int AS weekly_target_count
@@ -1928,6 +1931,28 @@ export async function createMondayReviewOrDirective(
         );
       }
       const review = mrRes.rows[0]!;
+      if (
+        current.effective_role.role_code === "DEPARTMENT_MANAGER" &&
+        review.department_id !== current.department.id
+      ) {
+        abort(
+          404,
+          "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+          "Không tìm thấy phiên Review Thứ Hai trong phạm vi phòng.",
+          {
+            denyAudit: {
+              action: "planning.directive.write",
+              resourceType: "monday_review",
+              resourceId: review.id,
+              scopeContext: {
+                review_department_id: review.department_id,
+                actor_department_id: current.department.id,
+              },
+              reasonCode: "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+            },
+          },
+        );
+      }
 
       const staffRes = await client.query<{
         id: string;

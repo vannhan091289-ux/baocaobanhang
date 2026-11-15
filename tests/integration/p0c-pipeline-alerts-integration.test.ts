@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { NextRequest } from "next/server";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { SYNTHETIC_USERS } from "../../scripts/seed-s1a.mjs";
@@ -20,7 +21,14 @@ import {
   patchProspect,
 } from "@/server/pipeline/p0c-pipeline-service";
 import type { Actor } from "@/server/service-core";
-import { establishSessionFromVerifiedOidcIdentity } from "@/server/session";
+import {
+  establishSessionFromVerifiedOidcIdentity,
+  SESSION_COOKIE_NAME,
+} from "@/server/session";
+import {
+  PATCH as patchProspectsRoute,
+  POST as postProspectsRoute,
+} from "@/app/api/pipeline/prospects/route";
 
 ensureDevtestEnvLoaded();
 const cfg = getRuntimeConfig();
@@ -185,14 +193,15 @@ describe("P0C Integration Tests: Pipeline State Machine & 6-Rule In-App Alert En
     );
     expect(Number(transRes.rows[0]?.cnt)).toBe(2);
 
-    // Lead + Opportunity creation
-    const lead = await createLead(staffKhcnActor, {
+    // Lead + Opportunity creation (prospect is now owned by mgrKhcnActor after handover)
+    const lead = await createLead(mgrKhcnActor, {
       lead_ref: `SYN-LEAD-${suffix}`,
       prospect_id: pros.data.id,
       customer_ref: "SYN-CIF-1001",
       display_label: "Synthetic Lead 01",
       need_group_code: "LOAN",
       due_date: "2026-11-10",
+      owner_staff_id: staffKhcnActor.ctx.staff_id,
     });
     expect(lead.ok).toBe(true);
     if (!lead.ok) return;
@@ -372,5 +381,161 @@ describe("P0C Integration Tests: Pipeline State Machine & 6-Rule In-App Alert En
       expect(resolved.ok).toBe(true);
       if (resolved.ok) expect(resolved.data.resolution_status).toBe("RESOLVED");
     }
+  });
+
+  it("enforces parent prospect/lead scope (L-02), 409 VERSION_CONFLICT, 403 CSRF/Origin, and atomic AuditEvent rollback (L-03)", async () => {
+    const staffKhdn = await makeActorForUserKey("staff_khdn");
+    const mgrKhcn = await makeActorForUserKey("mgr_khcn");
+
+    // 1. staff_khdn creates a prospect & lead in KHDN
+    const khdnPros = await createProspect(staffKhdn, {
+      prospect_ref: `SYN-L02-PROS-${randomUUID().slice(0, 6).toUpperCase()}`,
+      display_label: "L02 KHDN Prospect",
+      segment_code: "SME",
+    });
+    expect(khdnPros.ok).toBe(true);
+    if (!khdnPros.ok) return;
+    createdProspectIds.push(khdnPros.data.id);
+
+    const khdnLead = await createLead(staffKhdn, {
+      lead_ref: `SYN-L02-LEAD-${randomUUID().slice(0, 6).toUpperCase()}`,
+      prospect_id: khdnPros.data.id,
+      display_label: "L02 KHDN Lead",
+      need_group_code: "LOAN",
+    });
+    expect(khdnLead.ok).toBe(true);
+    if (!khdnLead.ok) return;
+    createdLeadIds.push(khdnLead.data.id);
+
+    // L-02: staff_khcn & mgr_khcn cannot link parent prospect_id / lead_id from KHDN -> 404
+    const crossLead = await createLead(staffKhcnActor, {
+      lead_ref: `SYN-L02-XLEAD-${randomUUID().slice(0, 6).toUpperCase()}`,
+      prospect_id: khdnPros.data.id,
+      display_label: "Cross-dept Lead",
+      need_group_code: "LOAN",
+    });
+    expect(crossLead.ok).toBe(false);
+    if (!crossLead.ok) expect(crossLead.status).toBe(404);
+
+    const crossOpp = await createOpportunity(mgrKhcn, {
+      opportunity_ref: `SYN-L02-XOPP-${randomUUID().slice(0, 6).toUpperCase()}`,
+      lead_id: khdnLead.data.id,
+      customer_ref: "SYN-CIF-2001",
+      display_label: "Cross-dept Opp",
+      kpi_group_code: "LOAN",
+      estimated_value: 1000,
+      expected_close_date: "2026-11-25",
+    });
+    expect(crossOpp.ok).toBe(false);
+    if (!crossOpp.ok) expect(crossOpp.status).toBe(404);
+
+    // Verify DENY audit_events recorded for cross-scope parent prospect/lead
+    const denyParentAudits = await migratorPool.query<{ c: string }>(
+      `SELECT count(*)::text AS c
+       FROM audit_events
+       WHERE action = 'pipeline.write'
+         AND decision = 'DENY'
+         AND resource_id IN ($1, $2)`,
+      [khdnPros.data.id, khdnLead.data.id],
+    );
+    expect(Number(denyParentAudits.rows[0]!.c)).toBeGreaterThanOrEqual(2);
+
+    // L-03a: 409 VERSION_CONFLICT on stale expected_version
+    const conflictPatch = await patchProspect(staffKhdn, {
+      id: khdnPros.data.id,
+      expected_version: khdnPros.data.row_version + 99,
+      stage: "QUALIFIED",
+    });
+    expect(conflictPatch.ok).toBe(false);
+    if (!conflictPatch.ok) {
+      expect(conflictPatch.status).toBe(409);
+      expect(conflictPatch.code).toBe("VERSION_CONFLICT");
+    }
+
+    // L-03b: 403 on bad CSRF token and bad Origin header via route handler
+    const badCsrfReq = new NextRequest(
+      `${cfg.appOrigin}/api/pipeline/prospects`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: cfg.appOrigin,
+          Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
+          "x-csrf-token": "invalid-csrf-token",
+        },
+        body: JSON.stringify({
+          prospect_ref: `SYN-L03-CSRF-${randomUUID().slice(0, 6).toUpperCase()}`,
+          display_label: "CSRF Test",
+          segment_code: "SME",
+        }),
+      },
+    );
+    const badCsrfRes = await postProspectsRoute(badCsrfReq);
+    expect(badCsrfRes.status).toBe(403);
+
+    const badOriginReq = new NextRequest(
+      `${cfg.appOrigin}/api/pipeline/prospects`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://evil.example.com",
+          Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
+          "x-csrf-token": staffKhdn.csrfToken,
+        },
+        body: JSON.stringify({
+          id: khdnPros.data.id,
+          expected_version: khdnPros.data.row_version,
+          stage: "QUALIFIED",
+        }),
+      },
+    );
+    const badOriginRes = await patchProspectsRoute(badOriginReq);
+    expect(badOriginRes.status).toBe(403);
+
+    // L-03c: Atomic AuditEvent rollback when INSERT on audit_events fails
+    const beforeCount = Number(
+      (
+        await migratorPool.query<{ c: string }>(
+          `SELECT count(*)::text AS c FROM prospects`,
+        )
+      ).rows[0]!.c,
+    );
+    await migratorPool.query(
+      `REVOKE INSERT ON TABLE audit_events FROM app_runtime_role`,
+    );
+    try {
+      const outageReq = new NextRequest(
+        `${cfg.appOrigin}/api/pipeline/prospects`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: cfg.appOrigin,
+            Cookie: `${SESSION_COOKIE_NAME}=${staffKhdn.rawSessionToken}`,
+            "x-csrf-token": staffKhdn.csrfToken,
+          },
+          body: JSON.stringify({
+            prospect_ref: `SYN-L03-OUTAGE-${randomUUID().slice(0, 6).toUpperCase()}`,
+            display_label: "Outage Rollback Test",
+            segment_code: "SME",
+          }),
+        },
+      );
+      const outageRes = await postProspectsRoute(outageReq);
+      expect(outageRes.status).toBe(500);
+    } finally {
+      await migratorPool.query(
+        `GRANT INSERT ON TABLE audit_events TO app_runtime_role`,
+      );
+    }
+    const afterCount = Number(
+      (
+        await migratorPool.query<{ c: string }>(
+          `SELECT count(*)::text AS c FROM prospects`,
+        )
+      ).rows[0]!.c,
+    );
+    expect(afterCount).toBe(beforeCount);
   });
 });

@@ -742,6 +742,24 @@ export async function listLeads(
   };
 }
 
+function isScopedParentInActorScope(
+  row: { department_id: string; owner_staff_id: string } | undefined,
+  actor: Actor,
+): boolean {
+  if (!row) return false;
+  const actorRole = actor.ctx.effective_role.role_code;
+  if (actorRole === "DEPARTMENT_MANAGER") {
+    return row.department_id === actor.ctx.department.id;
+  }
+  if (actorRole === "STAFF") {
+    return (
+      row.department_id === actor.ctx.department.id &&
+      row.owner_staff_id === actor.ctx.staff_id
+    );
+  }
+  return true;
+}
+
 export async function createLead(
   actor: Actor,
   body: unknown,
@@ -860,6 +878,33 @@ export async function createLead(
     ]);
     if ((dup.rowCount ?? 0) > 0) {
       return abort(409, "DUPLICATE_PIPELINE_REF", "lead_ref already exists");
+    }
+
+    if (prosVal) {
+      const parentProspect = await client.query<{
+        id: string;
+        department_id: string;
+        owner_staff_id: string;
+      }>(
+        `SELECT id, department_id, owner_staff_id FROM prospects WHERE id = $1`,
+        [prosVal],
+      );
+      if (!isScopedParentInActorScope(parentProspect.rows[0], actor)) {
+        return abort(
+          404,
+          "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+          "Không tìm thấy prospect trong phạm vi quyền.",
+          {
+            denyAudit: {
+              action: "pipeline.write",
+              resourceType: "prospect",
+              resourceId: prosVal,
+              scopeContext: { reason: "PARENT_PROSPECT_OUT_OF_SCOPE" },
+              reasonCode: "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+            },
+          },
+        );
+      }
     }
 
     const id = randomUUID();
@@ -1367,6 +1412,32 @@ export async function createOpportunity(
         "DUPLICATE_PIPELINE_REF",
         "opportunity_ref already exists",
       );
+    }
+
+    if (leadVal) {
+      const parentLead = await client.query<{
+        id: string;
+        department_id: string;
+        owner_staff_id: string;
+      }>(`SELECT id, department_id, owner_staff_id FROM leads WHERE id = $1`, [
+        leadVal,
+      ]);
+      if (!isScopedParentInActorScope(parentLead.rows[0], actor)) {
+        return abort(
+          404,
+          "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+          "Không tìm thấy lead trong phạm vi quyền.",
+          {
+            denyAudit: {
+              action: "pipeline.write",
+              resourceType: "lead",
+              resourceId: leadVal,
+              scopeContext: { reason: "PARENT_LEAD_OUT_OF_SCOPE" },
+              reasonCode: "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+            },
+          },
+        );
+      }
     }
 
     const id = randomUUID();

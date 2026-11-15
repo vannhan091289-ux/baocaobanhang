@@ -17,8 +17,10 @@
    ```
 2. Start PostgreSQL 18.7 (`127.0.0.1:55432`) and Keycloak 26.8.2 (`127.0.0.1:8080`), apply migrations `0001`–`0008`, and seed synthetic accounts & baseline data:
    ```bash
-   npm run env:test:up
-   npm run env:test:migrate
+   npm run env:test:start
+   npm run env:test:health
+   npm run db:migrate:preview
+   npm run db:migrate:up
    npm run env:test:seed
    ```
 3. Start the application (dev or production build):

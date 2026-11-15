@@ -132,13 +132,13 @@ describe("P0B-1 Unit Tests: Sales Plan, Single-Source Activity & Monday Review P
     expect(isValidPlanPeriodKey("WEEK", "2026-W99")).toBe(false);
     expect(isValidPlanPeriodKey("DAY", "2026-11-10")).toBe(true);
 
-    // ISO week 2026-W46 is Monday 2026-11-09 .. Sunday 2026-11-15
+    // ISO week 2026-W46 is Monday 2026-11-09 .. Sunday 2026-11-15 (half-open [Mon 00:00+07:00, next Mon 00:00+07:00))
     const bounds = resolveWeekBoundsVn("2026-W46");
     expect(bounds).not.toBeNull();
     expect(bounds?.mondayDate).toBe("2026-11-09");
     expect(bounds?.sundayDate).toBe("2026-11-15");
     expect(bounds?.startIsoUtc).toBe("2026-11-08T17:00:00.000Z");
-    expect(bounds?.endIsoUtc).toBe("2026-11-15T16:59:59.999Z");
+    expect(bounds?.endIsoUtc).toBe("2026-11-15T17:00:00.000Z");
 
     const beforeCutoff = getVnDateAndCutoffStatus(
       new Date("2026-11-10T17:45:00.000+07:00"),
