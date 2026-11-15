@@ -22,7 +22,7 @@
 | UAT & Hardening Handover | `TASK-0011` | Multi-role UAT E2E, least-privilege & latency tests, backup/restore, runbooks | PR #18 (`e82e2af5d17008c0384145c2a430d9cd922fda91`) |
 | Audit Cleanup | `TASK-0012` | Unify `VALIDATION_FAILED` in `p0b1-service`, security headers & audit cleanup | PR #19 (`0535756868dd7cebfe8d7e336f38965ecba50b0d`) |
 | Audit Hardening (Batch 1) | `TASK-0014` | `A-03` streaming body reader, `A-02` CSP/HSTS/COOP, `A-06` env parser, `A-08` CI/Dependabot | PR #21 (`d9d9e6fe88f5f710014627953d4aca72d181c1ea`) |
-| Conformance & Handover Refresh | `TASK-0015` | Fix `H-01`, `H-02`, `M-01`, `M-04`, `L-01`, `L-02`, `L-03`, `M-07` + A5 audit + C1..C5 gates | Pending merge on `fix/TASK-0015-conformance-handover` (`tasks/evidence/TASK-0015-gates.txt`) |
+| Conformance & Handover Refresh | `TASK-0015` | Fix `H-01`, `H-02`, `M-01`, `M-04`, `L-01`, `L-02`, `L-03`, `M-07` + A5 audit + C1..C5 gates | PR #27 (`67005c162b8e6f1e6a6a71c2a8188a0e09d82c5b`, post-merge CI `43684697313`) |
 
 ## 2. Security, RBAC & Data Integrity Verification Summary
 - **Least-privilege DB role (`app_runtime_role`):** Verified `rolsuper = false`, `rolbypassrls = false`, `INSERT`-only on `audit_events`, `SELECT/INSERT`-only on `pipeline_stage_transitions`; live `DELETE FROM audit_events` rejected with SQLSTATE `42501`.
