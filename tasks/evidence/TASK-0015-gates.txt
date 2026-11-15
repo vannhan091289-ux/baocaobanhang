@@ -1,0 +1,70 @@
+TASK-0015 — Verification & Conformance Gates Evidence (DEVTEST Synthetic)
+================================================================================
+Branch: fix/TASK-0015-conformance-handover
+Base main SHA: d9d9e6fe88f5f710014627953d4aca72d181c1ea (PR #21 merged)
+Toolchain: Node.js v24.22.2, npm 11.19.1, PostgreSQL 18.7, Keycloak 26.8.2, Gitleaks 8.30.1
+
+C1. Full CI Gates (after all code & doc changes)
+------------------------------------------------
+- npm ci: PASS (463 packages, lockfile unchanged)
+- npm run lint (`eslint . --max-warnings=0`): PASS
+- npm run format:check (`prettier --check .`): PASS
+- npm run typecheck (`tsc --noEmit`): PASS
+- npm run test:unit: PASS (14 test files, 52/52 tests)
+- npm run test:integration: PASS (9 test files, 46/46 tests; real PostgreSQL 18.7 + Keycloak 26.8.2)
+- npm run build (`next build`): PASS
+- npm run test:e2e (`playwright test`): PASS (13/13 Chromium tests)
+- npm run security (Gitleaks 8.30.1 full history + npm audit --audit-level=high): PASS (0 leaks; 0 High/Critical; 9 moderate in devDependencies glob/minimatch)
+- git diff --check: PASS
+
+C2. Clean Checkout Verification
+-------------------------------
+- Fresh clone into `/tmp/baocaobanhang-clean-checkout`
+- `npm ci` + `npm run lint` + `npm run format:check` + `npm run typecheck` + `npm run db:migrate:preview` + `npm run db:migrate:up` + `npm run env:test:seed` + `npm run build`
+- Result: C2_CLEAN_CHECKOUT=PASS
+
+C3. 6-Role Real OIDC Browser Journeys (Chromium)
+------------------------------------------------
+Visited all 7 pages (`/workspace`, `/workspace/dashboard`, `/workspace/kpi-targets`, `/workspace/planning`, `/workspace/pipeline`, `/workspace/customers`, `/workspace/alerts`) + logout (`/auth/logout` -> 401 on `/api/me`):
+- syn.admin01 (CONFIG_ADMIN, DVKH): PASS (7/7 HTTP 200, 0 console errors, 0 page errors, 0 CSP violations, 0 server 5xx, post-logout 401)
+- syn.exec01 (EXECUTIVE, KHCN): PASS (7/7 HTTP 200, 0 console errors, 0 page errors, 0 CSP violations, 0 server 5xx, post-logout 401)
+- syn.mgr.khcn (DEPARTMENT_MANAGER, KHCN): PASS (7/7 HTTP 200, 0 console errors, 0 page errors, 0 CSP violations, 0 server 5xx, post-logout 401)
+- syn.staff.khcn (STAFF, KHCN): PASS (7/7 HTTP 200, 0 console errors, 0 page errors, 0 CSP violations, 0 server 5xx, post-logout 401)
+- syn.mgr.khdn (DEPARTMENT_MANAGER, KHDN): PASS (7/7 HTTP 200, 0 console errors, 0 page errors, 0 CSP violations, 0 server 5xx, post-logout 401)
+- syn.staff.dvkh (STAFF, DVKH): PASS (7/7 HTTP 200, 0 console errors, 0 page errors, 0 CSP violations, 0 server 5xx, post-logout 401)
+- Result: C3_OVERALL=PASS
+
+C4. Live HTTP Negative Security & Concurrency Tests
+--------------------------------------------------
+- Query role/scope tamper (`GET /api/me?role=EXECUTIVE&scope=BRANCH`): 403 PASS
+- Header role tamper (`GET /api/me` with `x-role: EXECUTIVE`): 403 PASS
+- Invalid CSRF token (`POST /api/kpi/targets`): 403 PASS
+- Cross-origin `Origin: https://evil.example` (`POST /api/kpi/targets`): 403 PASS
+- Oversized JSON body > 16 KB (`POST /api/kpi/targets`): 422 PASS
+- Non-JSON `Content-Type: text/plain` (`POST /api/kpi/targets`): 415 PASS
+- Out-of-scope / non-existent customer ID (`GET /api/customers/.../360`): 404 PASS
+- Revoked session cookie reuse (`GET /api/me` after `POST /auth/logout`): 401 PASS
+- Optimistic concurrency stale `expected_version` (`PATCH /api/org/departments/[id]`): 409 PASS
+- Result: C4_OVERALL=PASS
+
+C5. API Latency & Backup/Restore/Rollback Drill
+-----------------------------------------------
+Warm API Latency (`syn.exec01`, 3 runs each, threshold < 1000ms):
+- GET /api/dashboard/overview: 200, [8.4, 7.3, 6.9] ms (avg 7.5 ms, max 8.4 ms)
+- GET /api/dashboard/drilldown: 200, [38.4, 11.1, 6.5] ms (avg 18.7 ms, max 38.4 ms)
+- GET /api/customers: 200, [4.6, 4.6, 4.4] ms (avg 4.5 ms, max 4.6 ms)
+- GET /api/kpi/targets: 200, [5.8, 5.3, 5.4] ms (avg 5.5 ms, max 5.8 ms)
+- GET /api/planning/activities: 200, [4.8, 4.7, 4.9] ms (avg 4.8 ms, max 4.9 ms)
+- GET /api/pipeline/leads: 200, [4.5, 4.4, 4.7] ms (avg 4.5 ms, max 4.7 ms)
+- GET /api/alerts: 200, [4.5, 4.9, 5.3] ms (avg 4.9 ms, max 5.3 ms)
+- Result: C5_LATENCY_UNDER_1000MS=PASS
+
+Backup / Restore / Rollback Drill (isolated `branch_sales_restore_verify`):
+- pg_dump -Fc -> pg_restore parity: live (27 tables, 515 constraints, 7002 audit_events) == restore (27 tables, 515 constraints, 7002 audit_events) -> PASS
+- Isolated rollback & re-apply of `0008_p0d_customer360_and_milestones.sql`: 27 tables, 513 constraints (note: `DROP ... CASCADE` removed 2 FK constraints on `activity_logs` & `opportunities` since `0008` uses `ADD COLUMN IF NOT EXISTS` without re-adding FK separately).
+
+D. Independent A5 Review
+------------------------
+- Reviewer: Read-only A5 subagent on `fix/TASK-0015-conformance-handover` (`e7b88e1`) vs `origin/main`
+- Initial review caught 1 P2 (`denyAudit` missing on new `p0b2`/`p0c` denial paths) + 1 Low (scope helper duplication); both fixed & re-verified in `e7b88e1`.
+- Final A5 Verdict: VERDICT: PASS (0 Critical, 0 High, 0 P1, 0 P2, 0 Medium, 0 Low).

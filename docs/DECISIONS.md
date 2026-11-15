@@ -13,6 +13,13 @@
 | D-09 | Database engine/ORM và môi trường dev/test cho Sprint 1 | ACCEPTED (synthetic DEVTEST) — PostgreSQL + additive migration 0003 v0.2 including TIMESTAMPTZ default corrections | Development-only approval recorded [2026-11-14](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md); real data/production excluded |
 | D-10 | Chuyển từ DEVTEST sang IdP doanh nghiệp/vận hành | OPEN — Đề xuất tách nghĩa vụ còn lại: IdP thật, MFA/re-auth/global logout, vận hành; D-08 DEVTEST không thay quyết định này | Phải có IT/owner approval và task riêng trước enterprise SSO; D-05 vẫn chặn real data/hosting |
 
+## Audit, Hardening & Conformance Handover — 2026-11-15 (DEVTEST Synthetic)
+
+- `TASK-0011` ([PR #18](https://github.com/vannhan091289-ux/baocaobanhang/pull/18), `e82e2af5d17008c0384145c2a430d9cd922fda91`), `TASK-0012` ([PR #19](https://github.com/vannhan091289-ux/baocaobanhang/pull/19), `0535756868dd7cebfe8d7e336f38965ecba50b0d`), và `TASK-0014` ([PR #21](https://github.com/vannhan091289-ux/baocaobanhang/pull/21), `d9d9e6fe88f5f710014627953d4aca72d181c1ea`) đã hợp nhất vào `main`.
+- `TASK-0015` (nhánh `fix/TASK-0015-conformance-handover`) khắc phục toàn bộ phát hiện `H-01`, `H-02`, `M-01`, `M-04`, `L-01`, `L-02`, `L-03`, `M-07` và làm mới hồ sơ bàn giao `READY FOR OWNER UAT`.
+- `TASK-0016` (`Status: REVIEWED`, chưa phê duyệt) theo dõi các hạng mục mở rộng `M-02`, `M-05`, `M-06`.
+- `M-03` (`ADJUST_FINAL` 2-step approval theo session người duyệt thứ 2) và `TASK-0013` (`A-01`, `A-04`, `A-05`) tiếp tục chờ quyết định của chủ dự án trên Issue #8. `D-05` và `D-10` giữ nguyên trạng thái `OPEN`.
+
 ## DEVTEST approval — 2026-11-14
 
 Chủ dự án đã duyệt [SPRINT-1-BC-PROPOSAL.md v0.2](decisions/SPRINT-1-BC-PROPOSAL.md), bao gồm phương án A cho D-01..D-04, D-07, ADR-003..005; migration 0003; mở rộng D-09/ADR-002 cho S1-B/C. [Approval record](decisions/SPRINT-1-BC-APPROVAL-2026-11-14.md) là nguồn chuẩn cho quyền DEVTEST. D-05 và D-10 **OPEN**; không chứa quyền production hoặc dữ liệu thật. Các đoạn lịch sử dưới đây phản ánh trạng thái trước phê duyệt và không ghi đè quyết định mới.
