@@ -862,6 +862,33 @@ export async function createLead(
       return abort(409, "DUPLICATE_PIPELINE_REF", "lead_ref already exists");
     }
 
+    if (prosVal) {
+      const parentProspect = await client.query<{
+        id: string;
+        department_id: string;
+        owner_staff_id: string;
+      }>(
+        `SELECT id, department_id, owner_staff_id FROM prospects WHERE id = $1`,
+        [prosVal],
+      );
+      const pRow = parentProspect.rows[0];
+      const actorRole = actor.ctx.effective_role.role_code;
+      const outOfScope =
+        !pRow ||
+        (actorRole === "DEPARTMENT_MANAGER" &&
+          pRow.department_id !== actor.ctx.department.id) ||
+        (actorRole === "STAFF" &&
+          (pRow.department_id !== actor.ctx.department.id ||
+            pRow.owner_staff_id !== actor.ctx.staff_id));
+      if (outOfScope) {
+        return abort(
+          404,
+          "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+          "Không tìm thấy prospect trong phạm vi quyền.",
+        );
+      }
+    }
+
     const id = randomUUID();
     await client.query(
       `INSERT INTO leads (
@@ -1367,6 +1394,33 @@ export async function createOpportunity(
         "DUPLICATE_PIPELINE_REF",
         "opportunity_ref already exists",
       );
+    }
+
+    if (leadVal) {
+      const parentLead = await client.query<{
+        id: string;
+        department_id: string;
+        owner_staff_id: string;
+      }>(
+        `SELECT id, department_id, owner_staff_id FROM leads WHERE id = $1`,
+        [leadVal],
+      );
+      const lRow = parentLead.rows[0];
+      const actorRole = actor.ctx.effective_role.role_code;
+      const outOfScope =
+        !lRow ||
+        (actorRole === "DEPARTMENT_MANAGER" &&
+          lRow.department_id !== actor.ctx.department.id) ||
+        (actorRole === "STAFF" &&
+          (lRow.department_id !== actor.ctx.department.id ||
+            lRow.owner_staff_id !== actor.ctx.staff_id));
+      if (outOfScope) {
+        return abort(
+          404,
+          "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
+          "Không tìm thấy lead trong phạm vi quyền.",
+        );
+      }
     }
 
     const id = randomUUID();
