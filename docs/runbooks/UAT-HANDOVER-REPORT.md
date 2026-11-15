@@ -28,7 +28,7 @@
 - **Backup & Restore (`AC-04`):** `pg_dump -Fc` → `pg_restore` on clone DB `branch_sales_restore_verify` verified 100% parity across all `27` public tables and `515` constraints.
 
 ## 3. Product Owner UAT Execution Checklist (DEVTEST Synthetic)
-1. **Start DEVTEST environment:** Follow `docs/runbooks/DEVTEST-OPERATIONS-AND-BACKUP.md` (`npm run env:test:up && npm run env:test:migrate && npm run env:test:seed && npm run build && npm run start`).
+1. **Start DEVTEST environment:** Follow `docs/runbooks/DEVTEST-OPERATIONS-AND-BACKUP.md` (`npm run env:test:start && npm run db:migrate:up && npm run env:test:seed && npm run build && npm run start`).
 2. **Verify `CONFIG_ADMIN` (`syn.admin01`):**
    - Sign in at `http://127.0.0.1:3100/auth/login`.
    - Confirm Org/Staff management works in `/workspace` and business modules (`/workspace/kpi-targets`, `/workspace/dashboard`, `/workspace/customers`) show RBAC denial.

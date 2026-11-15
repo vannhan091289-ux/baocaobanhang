@@ -11,8 +11,8 @@
 
 ### A3(a) Lệnh `npm run` trong tài liệu `.md` không tồn tại trong `package.json`
 Qua quét toàn bộ `*.md`, `docs/**/*.md`, `tasks/**/*.md` đối chiếu với `package.json#scripts`:
-- **`docs/runbooks/DEVTEST-OPERATIONS-AND-BACKUP.md:20-21`:** dùng `npm run env:test:up` và `npm run env:test:migrate` (KHÔNG tồn tại trong `package.json`; tên đúng là `npm run env:test:start` và `npm run db:migrate:up`).
-- **`docs/runbooks/UAT-HANDOVER-REPORT.md:31`:** dùng `npm run env:test:up && npm run env:test:migrate` (KHÔNG tồn tại trong `package.json`).
+- **`docs/runbooks/DEVTEST-OPERATIONS-AND-BACKUP.md:20-21`:** trước khi sửa dùng script `env:test:up` và `env:test:migrate` (KHÔNG tồn tại trong `package.json`; tên đúng là `npm run env:test:start` và `npm run db:migrate:up`).
+- **`docs/runbooks/UAT-HANDOVER-REPORT.md:31`:** trước khi sửa dùng `env:test:up && env:test:migrate` (KHÔNG tồn tại trong `package.json`).
 - Toàn bộ lệnh `npm run` trong `README.md`, `tasks/TASK-0001..0012.md`, `tasks/evidence/*.txt` khớp `package.json`.
 
 ### A3(b) Sai lệch trạng thái bàn giao trong `UAT-HANDOVER-REPORT.md` & `README.md`
