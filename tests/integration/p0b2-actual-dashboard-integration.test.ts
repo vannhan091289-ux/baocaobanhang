@@ -320,4 +320,130 @@ describe("P0B-2 Integration Tests: KPI Actuals, Reconciliation & Dashboard (TASK
     expect(mgrCrossDept.ok).toBe(false);
     if (!mgrCrossDept.ok) expect(mgrCrossDept.status).toBe(404);
   });
+
+  it("enforces ACTIVE, effective window, and same-department checks on ADJUST_FINAL approver (H-02)", async () => {
+    const staffKhcnActor = await makeActorForUserKey("staff_khcn");
+    const mgrKhcnActor = await makeActorForUserKey("mgr_khcn");
+    const mgrKhdnActor = await makeActorForUserKey("mgr_khdn");
+    const execActor = await makeActorForUserKey("exec01");
+
+    // Create, reconcile, and finalize a KHCN actual record
+    const created = await createKpiActual(staffKhcnActor, {
+      kpi_definition_id: "55555555-5555-4555-8555-555555555501",
+      period_type: "MONTH",
+      period_key: "2026-10",
+      as_of_date: "2026-10-31",
+      primary_staff_id: staffKhcnActor.ctx.staff_id,
+      actual_value: 150,
+      source_code: "SYNTHETIC_DEVTEST",
+      source_ref: "SYN-H02-001",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    createdActualIds.push(created.data.id);
+
+    const rec = await reconcileKpiActual(execActor, created.data.id, {
+      reconcile_action: "RECONCILE",
+      expected_version: created.data.row_version,
+    });
+    expect(rec.ok).toBe(true);
+    if (!rec.ok) return;
+
+    const fin = await reconcileKpiActual(execActor, created.data.id, {
+      reconcile_action: "FINALIZE",
+      expected_version: rec.data.row_version,
+    });
+    expect(fin.ok).toBe(true);
+    if (!fin.ok) return;
+
+    // 1. Different-department DEPARTMENT_MANAGER (mgr_khdn) -> 403 INVALID_ADJUSTMENT_APPROVER
+    const crossDeptAdj = await reconcileKpiActual(execActor, created.data.id, {
+      reconcile_action: "ADJUST_FINAL",
+      actual_value: 155,
+      approved_by_staff_id: mgrKhdnActor.ctx.staff_id,
+      adjustment_reason: "Cross-dept manager should be rejected",
+      expected_version: fin.data.row_version,
+    });
+    expect(crossDeptAdj.ok).toBe(false);
+    if (!crossDeptAdj.ok) {
+      expect(crossDeptAdj.status).toBe(403);
+      expect(crossDeptAdj.code).toBe("INVALID_ADJUSTMENT_APPROVER");
+    }
+
+    // 2. Temporary synthetic staff with REVOKED, future-effective, and expired roles -> all rejected
+    const tempStaffId = randomUUID();
+    const khcnDeptId = mgrKhcnActor.ctx.department.id;
+    await migratorPool.query(
+      `INSERT INTO staff (id, staff_code, display_name, department_id, status)
+       VALUES ($1, $2, $3, $4, 'ACTIVE')`,
+      [tempStaffId, `SYN_H02_${tempStaffId.slice(0, 6).toUpperCase()}`, "H02 Temp Approver", khcnDeptId],
+    );
+
+    const roleId = randomUUID();
+    try {
+      // 2a. REVOKED role (even with effective_to IS NULL)
+      await migratorPool.query(
+        `INSERT INTO role_assignments (id, staff_id, role_code, scope_type, scope_department_id, effective_from, effective_to, status, approval_reference)
+         VALUES ($1, $2, 'DEPARTMENT_MANAGER', 'DEPARTMENT', $3, CURRENT_TIMESTAMP - interval '1 day', NULL, 'REVOKED', 'SYN-H02-REF')`,
+        [roleId, tempStaffId, khcnDeptId],
+      );
+      const revokedAdj = await reconcileKpiActual(execActor, created.data.id, {
+        reconcile_action: "ADJUST_FINAL",
+        actual_value: 156,
+        approved_by_staff_id: tempStaffId,
+        adjustment_reason: "Revoked role must be rejected",
+        expected_version: fin.data.row_version,
+      });
+      expect(revokedAdj.ok).toBe(false);
+      if (!revokedAdj.ok) expect(revokedAdj.status).toBe(404);
+
+      // 2b. Future effective_from
+      await migratorPool.query(
+        `UPDATE role_assignments
+         SET status = 'ACTIVE', effective_from = CURRENT_TIMESTAMP + interval '1 day', effective_to = NULL
+         WHERE id = $1`,
+        [roleId],
+      );
+      const futureAdj = await reconcileKpiActual(execActor, created.data.id, {
+        reconcile_action: "ADJUST_FINAL",
+        actual_value: 157,
+        approved_by_staff_id: tempStaffId,
+        adjustment_reason: "Future role must be rejected",
+        expected_version: fin.data.row_version,
+      });
+      expect(futureAdj.ok).toBe(false);
+      if (!futureAdj.ok) expect(futureAdj.status).toBe(404);
+
+      // 2c. Expired effective_to
+      await migratorPool.query(
+        `UPDATE role_assignments
+         SET status = 'ACTIVE', effective_from = CURRENT_TIMESTAMP - interval '2 days', effective_to = CURRENT_TIMESTAMP - interval '1 hour'
+         WHERE id = $1`,
+        [roleId],
+      );
+      const expiredAdj = await reconcileKpiActual(execActor, created.data.id, {
+        reconcile_action: "ADJUST_FINAL",
+        actual_value: 158,
+        approved_by_staff_id: tempStaffId,
+        adjustment_reason: "Expired role must be rejected",
+        expected_version: fin.data.row_version,
+      });
+      expect(expiredAdj.ok).toBe(false);
+      if (!expiredAdj.ok) expect(expiredAdj.status).toBe(404);
+
+      // 3. Valid same-department ACTIVE approver (mgr_khcn) -> 200 OK
+      const validAdj = await reconcileKpiActual(execActor, created.data.id, {
+        reconcile_action: "ADJUST_FINAL",
+        actual_value: 160,
+        approved_by_staff_id: mgrKhcnActor.ctx.staff_id,
+        adjustment_reason: "Valid active same-dept manager approval",
+        expected_version: fin.data.row_version,
+      });
+      expect(validAdj.ok).toBe(true);
+      if (validAdj.ok) expect(validAdj.data.actual_value).toBe(160);
+    } finally {
+      await migratorPool.query(`DELETE FROM role_assignments WHERE id = $1`, [roleId]);
+      await migratorPool.query(`DELETE FROM staff WHERE id = $1`, [tempStaffId]);
+    }
+  });
 });

@@ -1015,11 +1015,25 @@ export async function reconcileKpiActual(
           "approved_by_staff_id and adjustment_reason are required",
         );
       }
-      const approverRes = await client.query(
-        `SELECT s.id, ra.role_code
+      const approverRes = await client.query<{
+        id: string;
+        department_id: string;
+        role_code: string;
+      }>(
+        `SELECT s.id, s.department_id, ra.role_code
          FROM staff s
-         JOIN role_assignments ra ON ra.staff_id = s.id AND ra.effective_to IS NULL
-         WHERE s.id = $1 AND s.status = 'ACTIVE'`,
+         JOIN role_assignments ra
+           ON ra.staff_id = s.id
+          AND ra.status = 'ACTIVE'
+          AND ra.effective_from <= CURRENT_TIMESTAMP
+          AND (ra.effective_to IS NULL OR ra.effective_to > CURRENT_TIMESTAMP)
+         WHERE s.id = $1 AND s.status = 'ACTIVE'
+         ORDER BY CASE ra.role_code
+           WHEN 'EXECUTIVE' THEN 1
+           WHEN 'DEPARTMENT_MANAGER' THEN 2
+           ELSE 3
+         END ASC
+         LIMIT 1`,
         [approverIdVal],
       );
       if ((approverRes.rowCount ?? 0) === 0) {
@@ -1029,7 +1043,8 @@ export async function reconcileKpiActual(
           "Không tìm thấy người phê duyệt.",
         );
       }
-      const approverRole = String(approverRes.rows[0]?.role_code);
+      const approverRow = approverRes.rows[0]!;
+      const approverRole = String(approverRow.role_code);
       if (
         approverRole !== "EXECUTIVE" &&
         approverRole !== "DEPARTMENT_MANAGER"
@@ -1038,6 +1053,16 @@ export async function reconcileKpiActual(
           403,
           "INVALID_ADJUSTMENT_APPROVER",
           "Approver must hold EXECUTIVE or DEPARTMENT_MANAGER role",
+        );
+      }
+      if (
+        approverRole === "DEPARTMENT_MANAGER" &&
+        String(approverRow.department_id) !== String(existing.department_id)
+      ) {
+        return abort(
+          403,
+          "INVALID_ADJUSTMENT_APPROVER",
+          "Department manager approver must belong to the same department",
         );
       }
 
