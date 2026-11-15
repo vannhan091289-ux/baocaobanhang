@@ -522,6 +522,29 @@ describe("S1-C AC-03 & AC-04: Millisecond Temporal Boundaries, Sequential Handov
       reason: "DUPLICATE_QUERY_PARAM",
     });
 
+    // Unknown query param -> UNKNOWN_QUERY_PARAM
+    const unknownParam = validateQueryParams(
+      new URLSearchParams("unexpected=1"),
+      ["q", "status", "department_id", "limit", "offset"],
+    );
+    expect(unknownParam).toEqual({
+      ok: false,
+      kind: "VALIDATION",
+      field: "unexpected",
+      reason: "UNKNOWN_QUERY_PARAM",
+    });
+
+    // Accepted query params -> ok: true
+    expect(
+      validateQueryParams(new URLSearchParams("q=abc&status=ACTIVE&limit=10"), [
+        "q",
+        "status",
+        "department_id",
+        "limit",
+        "offset",
+      ]),
+    ).toEqual({ ok: true });
+
     // Disallowed department_id in body of patchIdentityLink -> detected by findDisallowedTamperKey
     expect(
       findDisallowedTamperKey(

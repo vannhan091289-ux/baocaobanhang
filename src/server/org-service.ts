@@ -11,6 +11,7 @@ import {
   finalizeFailure,
   notFound,
   runAuthorityTransaction,
+  ServiceAbort,
   tamperRejected,
   type Actor,
   type ServiceFailure,
@@ -513,19 +514,8 @@ export async function patchDepartment(
       [deptId],
     );
     if (cur.rowCount === 0) {
-      abort(
-        404,
-        "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
-        "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
-        {
-          denyAudit: {
-            action: "org.department.write",
-            resourceType: "department",
-            resourceId: deptId,
-            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
-            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
-          },
-        },
+      throw new ServiceAbort(
+        notFound("department", deptId, "org.department.write"),
       );
     }
     if (cur.rows[0]!.row_version !== version.value) {
@@ -663,7 +653,7 @@ export async function createStaff(
 }
 
 /** Ends effective authority of a Staff inside the current transaction (history is kept). */
-export async function endStaffAuthority(
+async function endStaffAuthority(
   client: PoolClient,
   staffId: string,
   now: Date,
@@ -769,20 +759,7 @@ export async function patchStaff(
       [staffId],
     );
     if (cur.rowCount === 0) {
-      abort(
-        404,
-        "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
-        "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
-        {
-          denyAudit: {
-            action: "org.staff.write",
-            resourceType: "staff",
-            resourceId: staffId,
-            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
-            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
-          },
-        },
-      );
+      throw new ServiceAbort(notFound("staff", staffId, "org.staff.write"));
     }
     const before = cur.rows[0]!;
     if (before.row_version !== version.value) {
@@ -996,19 +973,8 @@ export async function patchIdentityLink(
       [linkId],
     );
     if (cur.rowCount === 0) {
-      abort(
-        404,
-        "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
-        "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
-        {
-          denyAudit: {
-            action: "org.staff.write",
-            resourceType: "identity_link",
-            resourceId: linkId,
-            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
-            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
-          },
-        },
+      throw new ServiceAbort(
+        notFound("identity_link", linkId, "org.staff.write"),
       );
     }
     const link = cur.rows[0]!;

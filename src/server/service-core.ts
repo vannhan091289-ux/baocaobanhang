@@ -170,7 +170,7 @@ const CONSTRAINT_CODES: Record<string, { status: 409 | 422; code: string }> = {
   },
 };
 
-export function mapDatabaseError(err: unknown): ServiceFailure | null {
+function mapDatabaseError(err: unknown): ServiceFailure | null {
   const e = err as PgErrorLike;
   if (e?.code === "23505") {
     const mapped = e.constraint ? CONSTRAINT_CODES[e.constraint] : undefined;
