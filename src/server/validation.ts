@@ -122,14 +122,6 @@ export function validateQueryParams(
       };
     }
     seen.add(key);
-    if (params.getAll(key).length > 1) {
-      return {
-        ok: false,
-        kind: "VALIDATION",
-        field: key,
-        reason: "DUPLICATE_QUERY_PARAM",
-      };
-    }
     if (!allowed.includes(key)) {
       return {
         ok: false,

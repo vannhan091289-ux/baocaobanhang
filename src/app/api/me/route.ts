@@ -9,7 +9,7 @@ import {
   SESSION_COOKIE_NAME,
   verifyRequestSession,
 } from "@/server/session";
-import { findTamperHeader, findTamperKey } from "@/server/validation";
+import { findTamperHeader, findTamperKey, isUuid } from "@/server/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,19 +63,13 @@ export async function GET(request: Request): Promise<Response> {
   // Check if the caller attempted to query another staff_id or department_id or tamper with role/scope
   const rawStaffId = url.searchParams.get("staff_id");
   const rawDepartmentId = url.searchParams.get("department_id");
-  const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const malformedReference = [rawStaffId, rawDepartmentId].some(
-    (value) => value !== null && !uuidPattern.test(value),
+    (value) => value !== null && !isUuid(value),
   );
   const requestedStaffId = rawStaffId?.toLowerCase();
   const requestedDepartmentId = rawDepartmentId?.toLowerCase();
-  const tamperedRole = url.searchParams.get("role");
-  const tamperedScope = url.searchParams.get("scope");
 
   if (
-    tamperedRole !== null ||
-    tamperedScope !== null ||
     findTamperHeader(request.headers) !== null ||
     findTamperKey(url.searchParams.keys()) !== null
   ) {

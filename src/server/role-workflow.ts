@@ -720,19 +720,10 @@ export async function decideProposal(
   if (!isUuid(id)) {
     return finalizeFailure(
       actor,
-      fail(
-        404,
-        "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
-        "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
-        {
-          denyAudit: {
-            action: "authz.role.assign",
-            resourceType: "role_assignment_proposal",
-            resourceId: "invalid-reference",
-            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
-            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
-          },
-        },
+      notFound(
+        "role_assignment_proposal",
+        "invalid-reference",
+        "authz.role.assign",
       ),
     );
   }
@@ -778,19 +769,8 @@ export async function decideProposal(
       [proposalId],
     );
     if (cur.rowCount === 0) {
-      abort(
-        404,
-        "RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE",
-        "Không tìm thấy tài nguyên yêu cầu trong phạm vi được phép.",
-        {
-          denyAudit: {
-            action: "authz.role.assign",
-            resourceType: "role_assignment_proposal",
-            resourceId: proposalId,
-            scopeContext: { reason: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND" },
-            reasonCode: "RESOURCE_OUT_OF_SCOPE_OR_NOT_FOUND",
-          },
-        },
+      throw new ServiceAbort(
+        notFound("role_assignment_proposal", proposalId, "authz.role.assign"),
       );
     }
     const proposal = cur.rows[0]!;
