@@ -555,7 +555,7 @@ describe("P0C Integration Tests: Pipeline State Machine & 6-Rule In-App Alert En
        ) VALUES (
          $1, 'OVERDUE_PIPELINE_FOLLOWUP', $4, 'P0', 'SELF',
          $2, $3, 'M05 Test Overdue Alert', 'Should escalate after SLA',
-         NOW() - INTERVAL '14 days', 'OPEN'
+         TIMESTAMPTZ '2026-11-01 00:00:00+00', 'OPEN'
        )`,
       [
         alertId,
