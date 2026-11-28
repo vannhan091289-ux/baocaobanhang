@@ -549,12 +549,24 @@ export async function verifyRequestSession(params: {
   }
 
   const session = sessRes.rows[0]!;
+  const sessionLastSeenMs = new Date(session.last_seen_at).getTime();
+  // Under concurrent requests on the same session, another handler may commit a
+  // slightly newer last_seen_at after this request captured `now`. Tolerate sub-5s
+  // concurrency skew when `params.now` is not explicitly injected, while still
+  // rejecting real clock skew (>5s) or explicit test clocks.
+  const effectiveNow =
+    params.now === undefined &&
+    sessionLastSeenMs > now.getTime() &&
+    sessionLastSeenMs - now.getTime() <= 5_000
+      ? new Date(sessionLastSeenMs)
+      : now;
+
   const timeoutCheck = isSessionActiveUnderTimeouts({
     createdAt: new Date(session.created_at),
     lastSeenAt: new Date(session.last_seen_at),
     absoluteExpiresAt: new Date(session.absolute_expires_at),
     revokedAt: session.revoked_at ? new Date(session.revoked_at) : null,
-    now,
+    now: effectiveNow,
   });
 
   if (!timeoutCheck.active) {
@@ -564,7 +576,7 @@ export async function verifyRequestSession(params: {
           `UPDATE sessions
            SET revoked_at = $1, revoked_reason = $2
            WHERE id = $3 AND revoked_at IS NULL`,
-          [now.toISOString(), timeoutCheck.reasonCode, session.id],
+          [effectiveNow.toISOString(), timeoutCheck.reasonCode, session.id],
         )
         .catch(() => undefined);
     }
@@ -616,7 +628,7 @@ export async function verifyRequestSession(params: {
   );
 
   const policyCheck = evaluateIdentityAndRolePolicy({
-    now,
+    now: effectiveNow,
     identityLink,
     staff,
     department,
@@ -631,12 +643,12 @@ export async function verifyRequestSession(params: {
         `UPDATE sessions
          SET revoked_at = $1, revoked_reason = $2
          WHERE id = $3 AND revoked_at IS NULL`,
-        [now.toISOString(), policyCheck.reasonCode, session.id],
+        [effectiveNow.toISOString(), policyCheck.reasonCode, session.id],
       )
       .catch(() => undefined);
 
     await recordDenyAuditSafely(db, {
-      occurredAt: now,
+      occurredAt: effectiveNow,
       actorStaffId: session.staff_id,
       actorSubjectRef: identityLink
         ? createSafeSubjectRef(identityLink.issuer, identityLink.subject)
@@ -655,20 +667,20 @@ export async function verifyRequestSession(params: {
     };
   }
 
-  // Refresh last_seen_at without extending absolute_expires_at
+  // Refresh last_seen_at monotonically without extending absolute_expires_at
   const refreshed = await db.query(
     `UPDATE sessions
-     SET last_seen_at = $1
+     SET last_seen_at = GREATEST(last_seen_at, $1::timestamptz)
      WHERE id = $2 AND revoked_at IS NULL
      RETURNING id`,
-    [now.toISOString(), session.id],
+    [effectiveNow.toISOString(), session.id],
   );
 
   // A concurrent authority mutation can revoke after our initial read. Never
   // authorize with freshly-read authority if this old cookie could not refresh.
   if (refreshed.rowCount !== 1) {
     await recordDenyAuditSafely(db, {
-      occurredAt: now,
+      occurredAt: effectiveNow,
       actorStaffId: session.staff_id,
       actorSubjectRef: identityLink
         ? createSafeSubjectRef(identityLink.issuer, identityLink.subject)
