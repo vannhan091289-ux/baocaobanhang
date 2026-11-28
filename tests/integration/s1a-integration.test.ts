@@ -114,6 +114,9 @@ beforeAll(async () => {
   // Clean up any leftover ephemeral S1-B/E2E test fixtures before verifying baseline 3-department state
   const tempStaffSubquery = `SELECT id FROM staff WHERE staff_code LIKE 'SYN-S1B-%' OR staff_code LIKE 'SYN-E2E-%' OR department_id IN (SELECT id FROM departments WHERE code NOT IN ('KHCN', 'KHDN', 'DVKH'))`;
   await migratorPool.query(
+    `DELETE FROM in_app_alerts WHERE owner_staff_id IN (${tempStaffSubquery}) OR escalated_to_staff_id IN (${tempStaffSubquery}) OR resolved_by_staff_id IN (${tempStaffSubquery}) OR department_id IN (SELECT id FROM departments WHERE code NOT IN ('KHCN', 'KHDN', 'DVKH'))`,
+  );
+  await migratorPool.query(
     `DELETE FROM audit_events WHERE actor_staff_id IN (${tempStaffSubquery})`,
   );
   await migratorPool.query(
